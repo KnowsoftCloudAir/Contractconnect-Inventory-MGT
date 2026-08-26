@@ -1,25 +1,31 @@
 {% extends "base.html" %}
 {% block title %}Facilities – CONTRAconnect{% endblock %}
 {% block content %}
-<h2 class="mb-4">Facilities / Service Providers</h2>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0">Facilities / Service Providers</h2>
+</div>
 <div class="card">
     <div class="table-responsive">
-        <table class="table table-hover mb-0">
+        <table class="table table-hover mb-0 align-middle">
             <thead>
                 <tr>
                     <th>Name</th>
                     <th>Type</th>
                     <th>Contact</th>
                     <th>Phone</th>
-                    <th>Target Clients / mo</th>
+                    <th>Target / mo</th>
                     <th>Status</th>
-                    <th>Action</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
             {% for f in facilities %}
             <tr>
-                <td>{{ f.name }}</td>
+                <td>
+                    <a href="{{ url_for('admin_facility_detail', fid=f.id) }}" class="fw-semibold text-decoration-none">
+                        {{ f.name }}
+                    </a>
+                </td>
                 <td><span class="badge bg-secondary">{{ f.facility_type }}</span></td>
                 <td>{{ f.contact_person or '—' }}</td>
                 <td>{{ f.phone or '—' }}</td>
@@ -28,19 +34,27 @@
                     {% if f.is_active %}
                     <span class="badge bg-success">Active</span>
                     {% else %}
-                    <span class="badge bg-warning text-dark">Pending</span>
+                    <span class="badge bg-warning text-dark">Inactive</span>
                     {% endif %}
                 </td>
-                <td>
-                    {% if not f.is_active %}
-                    <form method="post" action="{{ url_for('activate_facility', fid=f.id) }}" class="d-inline">
-                        <button class="btn btn-sm btn-success">Activate</button>
+                <td class="text-nowrap">
+                    <a href="{{ url_for('admin_facility_detail', fid=f.id) }}" class="btn btn-sm btn-outline-primary">Open</a>
+                    {% if f.is_active %}
+                    <form method="post" action="{{ url_for('deactivate_facility', fid=f.id) }}" class="d-inline"
+                          onsubmit="return confirm('Deactivate this facility? Providers will not be able to request stock.');">
+                        <input type="hidden" name="next" value="{{ url_for('admin_facilities') }}">
+                        <button class="btn btn-sm btn-outline-danger">Deactivate</button>
                     </form>
                     {% else %}
-                    <span class="text-muted small">—</span>
+                    <form method="post" action="{{ url_for('activate_facility', fid=f.id) }}" class="d-inline">
+                        <input type="hidden" name="next" value="{{ url_for('admin_facilities') }}">
+                        <button class="btn btn-sm btn-success">Activate</button>
+                    </form>
                     {% endif %}
                 </td>
             </tr>
+            {% else %}
+            <tr><td colspan="7" class="text-muted">No facilities yet</td></tr>
             {% endfor %}
             </tbody>
         </table>

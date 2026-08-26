@@ -10,8 +10,12 @@ from functools import wraps
 
 from flask import (
     Flask, render_template, redirect, url_for, flash, request,
-    jsonify, abort, session
+    jsonify, abort, session, send_file
 )
+from io import BytesIO
+from openpyxl import Workbook
+from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+from openpyxl.utils import get_column_letter
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import (
     LoginManager, UserMixin, login_user, logout_user,
@@ -132,6 +136,7 @@ class Facility(db.Model):
     encounters = db.relationship('ClientEncounter', back_populates='facility')
     expenditures = db.relationship('Expenditure', back_populates='facility')
     requests = db.relationship('ReplenishmentRequest', back_populates='facility')
+    messages = db.relationship('Message', back_populates='facility', cascade='all, delete-orphan')
 
 
 class Product(db.Model):
@@ -244,6 +249,24 @@ class Expenditure(db.Model):
 
     facility = db.relationship('Facility', back_populates='expenditures')
     creator = db.relationship('User')
+
+
+class Message(db.Model):
+    """Two-way messaging between Admin and a facility / provider"""
+    __tablename__ = 'messages'
+    id = db.Column(db.Integer, primary_key=True)
+    facility_id = db.Column(db.Integer, db.ForeignKey('facilities.id'), nullable=False)
+    sender_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    parent_id = db.Column(db.Integer, db.ForeignKey('messages.id'), nullable=True)  # reply thread
+    subject = db.Column(db.String(200))
+    body = db.Column(db.Text, nullable=False)
+    is_from_admin = db.Column(db.Boolean, default=False)
+    is_read = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    facility = db.relationship('Facility', back_populates='messages')
+    sender = db.relationship('User', foreign_keys=[sender_id])
+    parent = db.relationship('Message', remote_side=[id], backref='replies')
 
 
 # ---------------------------------------------------------------------------
@@ -617,7 +640,113 @@ def activate_facility(fid):
         u.is_active = True
     db.session.commit()
     flash(f'{fac.name} and its users activated.', 'success')
-    return redirect(url_for('admin_facilities'))
+    next_url = request.form.get('next') or url_for('admin_facility_detail', fid=fid)
+    return redirect(next_url)
+
+
+@app.route('/admin/facilities/<int:fid>/deactivate', methods=['POST'])
+@login_required
+@admin_required
+def deactivate_facility(fid):
+    """Deactivate facility: providers cannot submit replenishment requests."""
+    fac = db.session.get(Facility, fid)
+    if not fac:
+        abort(404)
+    fac.is_active = False
+    for u in fac.users:
+        u.is_active = False
+    db.session.commit()
+    flash(f'{fac.name} deactivated. Providers can no longer submit stock requests.', 'warning')
+    next_url = request.form.get('next') or url_for('admin_facility_detail', fid=fid)
+    return redirect(next_url)
+
+
+@app.route('/admin/facilities/<int:fid>')
+@login_required
+@admin_required
+def admin_facility_detail(fid):
+    """Full facility profile: details, users, read-only stock, messages, password reset."""
+    fac = db.session.get(Facility, fid)
+    if not fac:
+        abort(404)
+    stock_items = StockItem.query.filter_by(facility_id=fac.id).options(
+        joinedload(StockItem.product)
+    ).all()
+    recent_tx = StockTransaction.query.filter_by(facility_id=fac.id).order_by(
+        StockTransaction.created_at.desc()
+    ).limit(20).all()
+    open_requests = ReplenishmentRequest.query.filter_by(
+        facility_id=fac.id
+    ).order_by(ReplenishmentRequest.created_at.desc()).limit(15).all()
+    messages = Message.query.filter_by(facility_id=fac.id).order_by(
+        Message.created_at.desc()
+    ).limit(50).all()
+    # mark admin-visible messages from provider as read when admin opens page
+    for m in messages:
+        if not m.is_from_admin and not m.is_read:
+            m.is_read = True
+    db.session.commit()
+    return render_template(
+        'admin_facility_detail.html',
+        facility=fac,
+        stock_items=stock_items,
+        recent_tx=recent_tx,
+        open_requests=open_requests,
+        messages=messages,
+    )
+
+
+@app.route('/admin/facilities/<int:fid>/reset-password', methods=['POST'])
+@login_required
+@admin_required
+def admin_reset_provider_password(fid):
+    fac = db.session.get(Facility, fid)
+    if not fac:
+        abort(404)
+    user_id = request.form.get('user_id')
+    new_pw = request.form.get('new_password', '').strip()
+    confirm = request.form.get('confirm_password', '').strip()
+    user = db.session.get(User, int(user_id)) if user_id else None
+    if not user or user.facility_id != fac.id or user.role != 'provider':
+        flash('Invalid provider user.', 'danger')
+        return redirect(url_for('admin_facility_detail', fid=fid))
+    if new_pw != confirm:
+        flash('Passwords do not match.', 'danger')
+        return redirect(url_for('admin_facility_detail', fid=fid))
+    ok, msg = validate_password_strength(new_pw, min_length=8, require_strong=False)
+    if not ok:
+        flash(msg, 'danger')
+        return redirect(url_for('admin_facility_detail', fid=fid))
+    user.set_password(new_pw)
+    db.session.commit()
+    flash(f'Password updated for {user.full_name} ({user.email}). Share it securely with them.', 'success')
+    return redirect(url_for('admin_facility_detail', fid=fid))
+
+
+@app.route('/admin/facilities/<int:fid>/message', methods=['POST'])
+@login_required
+@admin_required
+def admin_send_message(fid):
+    fac = db.session.get(Facility, fid)
+    if not fac:
+        abort(404)
+    subject = request.form.get('subject', '').strip() or 'Message from Admin'
+    body = request.form.get('body', '').strip()
+    if not body:
+        flash('Message body is required.', 'danger')
+        return redirect(url_for('admin_facility_detail', fid=fid))
+    msg = Message(
+        facility_id=fac.id,
+        sender_id=current_user.id,
+        subject=subject,
+        body=body,
+        is_from_admin=True,
+        is_read=False,
+    )
+    db.session.add(msg)
+    db.session.commit()
+    flash('Message sent to facility.', 'success')
+    return redirect(url_for('admin_facility_detail', fid=fid))
 
 
 @app.route('/admin/products', methods=['GET', 'POST'])
@@ -765,6 +894,282 @@ def admin_costs():
     return render_template('admin_costs.html', cost_data=cost_data, uptake=uptake, days=days)
 
 
+def _style_header(ws, row=1):
+    fill = PatternFill('solid', fgColor='0D6E6E')
+    font = Font(bold=True, color='FFFFFF')
+    for cell in ws[row]:
+        cell.fill = fill
+        cell.font = font
+        cell.alignment = Alignment(horizontal='center', wrap_text=True)
+
+
+def _autosize(ws, max_width=40):
+    for col in ws.columns:
+        length = 0
+        col_letter = get_column_letter(col[0].column)
+        for cell in col:
+            try:
+                length = max(length, len(str(cell.value or '')))
+            except Exception:
+                pass
+        ws.column_dimensions[col_letter].width = min(max(length + 2, 12), max_width)
+
+
+@app.route('/admin/export/financial')
+@login_required
+@admin_required
+def export_financial_excel():
+    """Excel report for financial analysis: unit cost, per-kiosk costs, ledgers, method commodity cost."""
+    days = int(request.args.get('days', 90))
+    end = datetime.utcnow().date()
+    start = end - timedelta(days=days)
+    cost_data = compute_cost_metrics(start, end)
+    uptake = get_method_uptake(start, end)
+
+    wb = Workbook()
+
+    # --- Summary ---
+    ws = wb.active
+    ws.title = 'Cost Summary'
+    ws.append(['CONTRAconnect — Financial Analysis Report'])
+    ws.append(['Period start', cost_data['period']['start']])
+    ws.append(['Period end', cost_data['period']['end']])
+    ws.append([])
+    ws.append(['Metric', 'Value'])
+    ws.append(['Total clients served', cost_data['total_clients']])
+    ws.append(['Total operational cost', cost_data['total_operational_cost']])
+    ws.append(['Platform build cost (separate)', cost_data['platform_build_cost']])
+    ws.append(['Unit cost per client (ops ÷ clients)', cost_data['unit_cost_per_client']])
+    ws['A1'].font = Font(bold=True, size=14, color='0D6E6E')
+    _autosize(ws)
+
+    # --- Per facility ---
+    ws2 = wb.create_sheet('Cost by Facility')
+    ws2.append(['Facility', 'Type', 'Clients served', 'Operating cost', 'Unit cost per client', 'Efficiency note'])
+    _style_header(ws2)
+    avg = cost_data['unit_cost_per_client'] or 0
+    for k in cost_data['per_kiosk']:
+        note = 'No activity'
+        if k['clients'] > 0:
+            if avg and k['unit_cost'] > avg * 1.3:
+                note = 'Above average — review'
+            elif avg and k['unit_cost'] < avg * 0.7:
+                note = 'Efficient'
+            else:
+                note = 'On track'
+        ws2.append([k['name'], k['type'], k['clients'], k['operating_cost'], k['unit_cost'], note])
+    _autosize(ws2)
+
+    # --- Method commodity ---
+    ws3 = wb.create_sheet('Commodity by Method')
+    ws3.append(['Method code', 'Product', 'Qty issued', 'Commodity cost'])
+    _style_header(ws3)
+    for m in cost_data['method_stats']:
+        ws3.append([m['method_code'], m['name'], m['qty_issued'], m['commodity_cost']])
+    _autosize(ws3)
+
+    # --- Method uptake ---
+    ws4 = wb.create_sheet('Method Uptake')
+    ws4.append(['Method', 'Count', 'Percent'])
+    _style_header(ws4)
+    for u in uptake:
+        ws4.append([u['method'], u['count'], u['pct']])
+    _autosize(ws4)
+
+    # --- Ledger detail ---
+    ws5 = wb.create_sheet('Expenditure Ledger')
+    ws5.append(['Date', 'Facility', 'Category', 'Description', 'Amount', 'Platform cost?'])
+    _style_header(ws5)
+    q = Expenditure.query.filter(
+        Expenditure.expenditure_date.between(start, end)
+    ).order_by(Expenditure.expenditure_date.desc()).all()
+    for e in q:
+        ws5.append([
+            e.expenditure_date.isoformat() if e.expenditure_date else '',
+            e.facility.name if e.facility else 'Central',
+            e.category,
+            e.description or '',
+            float(e.amount or 0),
+            'Yes' if e.is_platform_cost else 'No',
+        ])
+    _autosize(ws5)
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = f'CONTRAconnect_Financial_{start.isoformat()}_to_{end.isoformat()}.xlsx'
+    return send_file(
+        buf,
+        as_attachment=True,
+        download_name=fname,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+
+
+@app.route('/admin/export/full')
+@login_required
+@admin_required
+def export_full_excel():
+    """Complete operational data dump: facilities, users, stock, transactions, encounters, requests, messages, expenditures."""
+    wb = Workbook()
+
+    # Facilities
+    ws = wb.active
+    ws.title = 'Facilities'
+    ws.append(['ID', 'Name', 'Type', 'Address', 'City', 'Contact', 'Phone', 'Target clients/mo', 'Active', 'Created'])
+    _style_header(ws)
+    for f in Facility.query.order_by(Facility.id).all():
+        ws.append([
+            f.id, f.name, f.facility_type, f.address or '', f.city or '',
+            f.contact_person or '', f.phone or '', f.target_clients_monthly,
+            'Yes' if f.is_active else 'No',
+            f.created_at.strftime('%Y-%m-%d %H:%M') if f.created_at else '',
+        ])
+    _autosize(ws)
+
+    # Users
+    ws = wb.create_sheet('Users')
+    ws.append(['ID', 'Email', 'Full name', 'Role', 'Facility ID', 'Facility name', 'Active', 'Created'])
+    _style_header(ws)
+    for u in User.query.order_by(User.id).all():
+        ws.append([
+            u.id, u.email, u.full_name, u.role, u.facility_id,
+            u.facility.name if u.facility else '',
+            'Yes' if u.is_active else 'No',
+            u.created_at.strftime('%Y-%m-%d %H:%M') if u.created_at else '',
+        ])
+    _autosize(ws)
+
+    # Products
+    ws = wb.create_sheet('Products')
+    ws.append(['ID', 'Name', 'Method code', 'Unit', 'Unit cost', 'Active'])
+    _style_header(ws)
+    for p in Product.query.order_by(Product.id).all():
+        ws.append([p.id, p.name, p.method_code, p.unit, float(p.unit_cost or 0), 'Yes' if p.is_active else 'No'])
+    _autosize(ws)
+
+    # Stock balances
+    ws = wb.create_sheet('Stock Balances')
+    ws.append(['Facility', 'Product', 'Method', 'On hand', 'Reorder level', 'Last updated'])
+    _style_header(ws)
+    for s in StockItem.query.options(joinedload(StockItem.facility), joinedload(StockItem.product)).all():
+        ws.append([
+            s.facility.name if s.facility else '',
+            s.product.name if s.product else '',
+            s.product.method_code if s.product else '',
+            s.quantity_on_hand,
+            s.reorder_level,
+            s.last_updated.strftime('%Y-%m-%d %H:%M') if s.last_updated else '',
+        ])
+    _autosize(ws)
+
+    # Stock transactions
+    ws = wb.create_sheet('Stock Transactions')
+    ws.append(['ID', 'Date', 'Facility', 'Product', 'Type', 'Qty', 'Unit cost', 'Reference', 'Notes'])
+    _style_header(ws)
+    for t in StockTransaction.query.order_by(StockTransaction.created_at.desc()).limit(5000).all():
+        ws.append([
+            t.id,
+            t.created_at.strftime('%Y-%m-%d %H:%M') if t.created_at else '',
+            t.facility.name if t.facility else '',
+            t.product.name if t.product else '',
+            t.transaction_type,
+            t.quantity,
+            float(t.unit_cost or 0),
+            t.reference or '',
+            t.notes or '',
+        ])
+    _autosize(ws)
+
+    # Encounters
+    ws = wb.create_sheet('Client Encounters')
+    ws.append([
+        'ID', 'Date', 'Facility', 'Age band', 'Parity', 'Education',
+        'Method offered', 'Method accepted', 'Outcome', 'Refusal reason',
+        'Discontinuation reason', 'Qty dispensed', 'Product',
+    ])
+    _style_header(ws)
+    for e in ClientEncounter.query.order_by(ClientEncounter.encounter_date.desc()).limit(10000).all():
+        ws.append([
+            e.id,
+            e.encounter_date.isoformat() if e.encounter_date else '',
+            e.facility.name if e.facility else '',
+            e.client_age_band or '',
+            e.client_parity or '',
+            e.education_level or '',
+            e.method_offered or '',
+            e.method_accepted or '',
+            e.outcome or '',
+            e.refusal_reason or '',
+            e.discontinuation_reason or '',
+            e.quantity_dispensed or 0,
+            e.product.name if e.product else '',
+        ])
+    _autosize(ws)
+
+    # Requests
+    ws = wb.create_sheet('Replenishment Requests')
+    ws.append(['ID', 'Facility', 'Product', 'Qty', 'Unit cost', 'Status', 'Justification', 'Created'])
+    _style_header(ws)
+    for r in ReplenishmentRequest.query.order_by(ReplenishmentRequest.created_at.desc()).all():
+        ws.append([
+            r.id,
+            r.facility.name if r.facility else '',
+            r.product.name if r.product else '',
+            r.quantity_requested,
+            float(r.unit_cost or 0),
+            r.status,
+            r.justification or '',
+            r.created_at.strftime('%Y-%m-%d %H:%M') if r.created_at else '',
+        ])
+    _autosize(ws)
+
+    # Expenditures
+    ws = wb.create_sheet('Expenditures')
+    ws.append(['ID', 'Date', 'Facility', 'Category', 'Description', 'Amount', 'Platform cost?'])
+    _style_header(ws)
+    for e in Expenditure.query.order_by(Expenditure.expenditure_date.desc()).all():
+        ws.append([
+            e.id,
+            e.expenditure_date.isoformat() if e.expenditure_date else '',
+            e.facility.name if e.facility else 'Central',
+            e.category,
+            e.description or '',
+            float(e.amount or 0),
+            'Yes' if e.is_platform_cost else 'No',
+        ])
+    _autosize(ws)
+
+    # Messages
+    ws = wb.create_sheet('Messages')
+    ws.append(['ID', 'Facility', 'From admin?', 'Sender', 'Subject', 'Body', 'Read?', 'Created'])
+    _style_header(ws)
+    for m in Message.query.order_by(Message.created_at.desc()).limit(2000).all():
+        ws.append([
+            m.id,
+            m.facility.name if m.facility else '',
+            'Yes' if m.is_from_admin else 'No',
+            m.sender.full_name if m.sender else '',
+            m.subject or '',
+            m.body or '',
+            'Yes' if m.is_read else 'No',
+            m.created_at.strftime('%Y-%m-%d %H:%M') if m.created_at else '',
+        ])
+    _autosize(ws)
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = f'CONTRAconnect_FullData_{datetime.utcnow().strftime("%Y%m%d_%H%M")}.xlsx'
+    return send_file(
+        buf,
+        as_attachment=True,
+        download_name=fname,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+
+
+
 # ---------------------------------------------------------------------------
 # Provider Routes
 # ---------------------------------------------------------------------------
@@ -808,6 +1213,9 @@ def provider_dashboard():
 @provider_required
 def provider_request():
     fac = current_user.facility
+    if not fac or not fac.is_active or not current_user.is_active:
+        flash('Your facility is deactivated. You cannot submit stock requests. Contact the administrator.', 'danger')
+        return redirect(url_for('provider_dashboard'))
     products = Product.query.filter_by(is_active=True).all()
     if request.method == 'POST':
         prod = db.session.get(Product, int(request.form['product_id']))
@@ -897,6 +1305,56 @@ def provider_stock():
         StockTransaction.created_at.desc()
     ).limit(50).all()
     return render_template('provider_stock.html', stock_items=stock_items, transactions=transactions, facility=fac)
+
+
+
+@app.route('/provider/messages', methods=['GET', 'POST'])
+@login_required
+@provider_required
+def provider_messages():
+    """Provider inbox: read admin messages and reply."""
+    if current_user.role == 'admin':
+        return redirect(url_for('admin_dashboard'))
+    fac = current_user.facility
+    if not fac:
+        flash('No facility linked.', 'warning')
+        return redirect(url_for('provider_dashboard'))
+
+    if request.method == 'POST':
+        body = request.form.get('body', '').strip()
+        parent_id = request.form.get('parent_id') or None
+        subject = request.form.get('subject', '').strip() or 'Reply from provider'
+        if not body:
+            flash('Message body is required.', 'danger')
+            return redirect(url_for('provider_messages'))
+        parent = None
+        if parent_id:
+            parent = db.session.get(Message, int(parent_id))
+            if parent and parent.facility_id != fac.id:
+                parent = None
+        msg = Message(
+            facility_id=fac.id,
+            sender_id=current_user.id,
+            parent_id=parent.id if parent else None,
+            subject=subject if not parent else (parent.subject or 'Reply'),
+            body=body,
+            is_from_admin=False,
+            is_read=False,
+        )
+        db.session.add(msg)
+        db.session.commit()
+        flash('Message sent.', 'success')
+        return redirect(url_for('provider_messages'))
+
+    messages = Message.query.filter_by(facility_id=fac.id).order_by(
+        Message.created_at.desc()
+    ).limit(80).all()
+    # mark messages from admin as read
+    for m in messages:
+        if m.is_from_admin and not m.is_read:
+            m.is_read = True
+    db.session.commit()
+    return render_template('provider_messages.html', facility=fac, messages=messages)
 
 
 # ---------------------------------------------------------------------------

@@ -6,14 +6,22 @@
         <h2 class="mb-0">Operational Cost Analytics</h2>
         <p class="text-muted mb-0">Unit cost per client · Operating cost per kiosk · Efficiency insights</p>
     </div>
-    <form class="d-flex gap-2" method="get">
-        <select name="days" class="form-select form-select-sm" onchange="this.form.submit()">
-            <option value="30" {% if days==30 %}selected{% endif %}>Last 30 days</option>
-            <option value="90" {% if days==90 %}selected{% endif %}>Last 90 days</option>
-            <option value="180" {% if days==180 %}selected{% endif %}>Last 180 days</option>
-            <option value="365" {% if days==365 %}selected{% endif %}>Last 365 days</option>
-        </select>
-    </form>
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+        <form class="d-flex gap-2" method="get">
+            <select name="days" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="30" {% if days==30 %}selected{% endif %}>Last 30 days</option>
+                <option value="90" {% if days==90 %}selected{% endif %}>Last 90 days</option>
+                <option value="180" {% if days==180 %}selected{% endif %}>Last 180 days</option>
+                <option value="365" {% if days==365 %}selected{% endif %}>Last 365 days</option>
+            </select>
+        </form>
+        <a class="btn btn-sm btn-success" href="{{ url_for('export_financial_excel', days=days) }}">
+            <i class="bi bi-file-earmark-excel"></i> Financial Excel
+        </a>
+        <a class="btn btn-sm btn-outline-success" href="{{ url_for('export_full_excel') }}">
+            <i class="bi bi-download"></i> Full data Excel
+        </a>
+    </div>
 </div>
 
 <div class="alert alert-info">

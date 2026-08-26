@@ -95,11 +95,14 @@
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_dispatch' %}active{% endif %}" href="{{ url_for('admin_dispatch') }}"><i class="bi bi-truck"></i> Dispatch Stock</a></li>
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_requests' %}active{% endif %}" href="{{ url_for('admin_requests') }}"><i class="bi bi-clipboard-check"></i> Requests</a></li>
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_expenditures' %}active{% endif %}" href="{{ url_for('admin_expenditures') }}"><i class="bi bi-journal-text"></i> Ledgers</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('export_financial_excel', days=90) }}"><i class="bi bi-file-earmark-excel"></i> Export financial</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('export_full_excel') }}"><i class="bi bi-download"></i> Export full data</a></li>
                     {% else %}
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'provider_dashboard' %}active{% endif %}" href="{{ url_for('provider_dashboard') }}"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'provider_stock' %}active{% endif %}" href="{{ url_for('provider_stock') }}"><i class="bi bi-boxes"></i> My Stock</a></li>
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'provider_request' %}active{% endif %}" href="{{ url_for('provider_request') }}"><i class="bi bi-plus-circle"></i> Request Stock</a></li>
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'provider_encounter' %}active{% endif %}" href="{{ url_for('provider_encounter') }}"><i class="bi bi-person-hearts"></i> Client Encounter</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'provider_messages' %}active{% endif %}" href="{{ url_for('provider_messages') }}"><i class="bi bi-chat-dots"></i> Messages</a></li>
                     {% endif %}
                 </ul>
             </nav>
