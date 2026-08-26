@@ -60,7 +60,21 @@
                         </span>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('change_password') }}" title="Change password">
+                            <i class="bi bi-key"></i> <span class="d-none d-lg-inline">Password</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('logout') }}"><i class="bi bi-box-arrow-right"></i> Logout</a>
+                    </li>
+                    {% else %}
+                    {# Discreet admin access icon on title bar — no label on small screens #}
+                    <li class="nav-item">
+                        <a class="nav-link px-2 opacity-50" href="{{ url_for('admin_access') }}"
+                           title="Authorised access" aria-label="Authorised access"
+                           style="font-size: 0.95rem;">
+                            <i class="bi bi-shield-lock"></i>
+                        </a>
                     </li>
                     {% endif %}
                 </ul>

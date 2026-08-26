@@ -45,6 +45,30 @@ login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 login_manager.login_message_category = 'warning'
 
+# ---------------------------------------------------------------------------
+# Password policy
+# ---------------------------------------------------------------------------
+import re
+
+def validate_password_strength(password, min_length=8, require_strong=False):
+    """Return (ok: bool, message: str). require_strong=True for admin-level."""
+    if not password or len(password) < min_length:
+        return False, f'Password must be at least {min_length} characters.'
+    if require_strong:
+        if not re.search(r'[A-Z]', password):
+            return False, 'Password must include at least one uppercase letter.'
+        if not re.search(r'[a-z]', password):
+            return False, 'Password must include at least one lowercase letter.'
+        if not re.search(r'[0-9]', password):
+            return False, 'Password must include at least one number.'
+        if not re.search(r'[^A-Za-z0-9]', password):
+            return False, 'Password must include at least one special character.'
+        if len(password) < 10:
+            return False, 'Admin password must be at least 10 characters.'
+    return True, 'OK'
+
+
+
 # Create tables (and seed once) under Gunicorn / Render — safe to call repeatedly
 _db_ready = False
 
@@ -407,6 +431,10 @@ def login():
         password = request.form.get('password', '')
         user = User.query.filter_by(email=email, is_active=True).first()
         if user and user.check_password(password):
+            if user.role == 'admin':
+                # Do not allow admin via public provider login
+                flash('Please use the authorised admin access page.', 'warning')
+                return redirect(url_for('admin_access'))
             login_user(user, remember=True)
             flash(f'Welcome back, {user.full_name}!', 'success')
             return redirect(url_for('index'))
@@ -420,6 +448,64 @@ def logout():
     logout_user()
     flash('You have been logged out.', 'info')
     return redirect(url_for('login'))
+
+
+@app.route('/admin-access', methods=['GET', 'POST'])
+def admin_access():
+    """Confidential admin-only sign-in (not linked from public landing or navbar)."""
+    if current_user.is_authenticated:
+        if current_user.role == 'admin':
+            return redirect(url_for('admin_dashboard'))
+        return redirect(url_for('provider_dashboard'))
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip().lower()
+        password = request.form.get('password', '')
+        user = User.query.filter_by(email=email, is_active=True, role='admin').first()
+        if user and user.check_password(password):
+            login_user(user, remember=False)  # do not persist admin session long-term
+            flash(f'Welcome, {user.full_name}.', 'success')
+            return redirect(url_for('admin_dashboard'))
+        # Generic message — do not reveal whether email exists
+        flash('Invalid credentials or unauthorised access.', 'danger')
+        return redirect(url_for('admin_access'))
+    return render_template('admin_login.html')
+
+
+
+@app.route('/change-password', methods=['GET', 'POST'])
+@login_required
+def change_password():
+    """Allow any authenticated user (admin or provider) to change their password."""
+    if request.method == 'POST':
+        current_pw = request.form.get('current_password', '')
+        new_pw = request.form.get('new_password', '')
+        confirm = request.form.get('confirm_password', '')
+
+        if not current_user.check_password(current_pw):
+            flash('Current password is incorrect.', 'danger')
+            return redirect(url_for('change_password'))
+
+        if new_pw != confirm:
+            flash('New password and confirmation do not match.', 'danger')
+            return redirect(url_for('change_password'))
+
+        require_strong = current_user.role == 'admin'
+        min_len = 10 if require_strong else 8
+        ok, msg = validate_password_strength(new_pw, min_length=min_len, require_strong=require_strong)
+        if not ok:
+            flash(msg, 'danger')
+            return redirect(url_for('change_password'))
+
+        if current_user.check_password(new_pw):
+            flash('New password must be different from the current password.', 'warning')
+            return redirect(url_for('change_password'))
+
+        current_user.set_password(new_pw)
+        db.session.commit()
+        flash('Password updated successfully.', 'success')
+        return redirect(url_for('index'))
+
+    return render_template('change_password.html')
 
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -437,8 +523,9 @@ def register():
         if not email or not full_name or not password or not facility_name:
             flash('Please fill in all required fields (Name, Email, Password, Facility).', 'danger')
             return redirect(url_for('register'))
-        if len(password) < 6:
-            flash('Password must be at least 6 characters.', 'danger')
+        ok, msg = validate_password_strength(password, min_length=8, require_strong=False)
+        if not ok:
+            flash(msg, 'danger')
             return redirect(url_for('register'))
 
         try:
@@ -841,7 +928,7 @@ def seed_data():
         return
 
     admin = User(email='admin@contraconnect.local', full_name='System Administrator', role='admin', is_active=True)
-    admin.set_password('admin123')
+    admin.set_password(os.environ.get('ADMIN_PASSWORD', 'Contra@Admin2026!'))
     db.session.add(admin)
 
     # Sample products
@@ -864,9 +951,9 @@ def seed_data():
 
     # Provider users
     p1 = User(email='kiosk1@contraconnect.local', full_name='Amina Yusuf', role='provider', facility_id=fac1.id, is_active=True)
-    p1.set_password('provider123')
+    p1.set_password(os.environ.get('PROVIDER_PASSWORD', 'Provider@2026'))
     p2 = User(email='phc1@contraconnect.local', full_name='Dr. Okonkwo', role='provider', facility_id=fac2.id, is_active=True)
-    p2.set_password('provider123')
+    p2.set_password(os.environ.get('PROVIDER_PASSWORD', 'Provider@2026'))
     db.session.add_all([p1, p2])
 
     db.session.commit()

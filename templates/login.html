@@ -1,39 +1,100 @@
 {% extends "base.html" %}
 {% block title %}Login – CONTRAconnect{% endblock %}
 {% block content %}
-<div class="row justify-content-center mt-5">
-    <div class="col-md-5 col-lg-4">
-        <div class="card shadow">
+<div class="row justify-content-center mt-4 mb-2">
+    <div class="col-lg-8 text-center">
+        <h1 class="fw-bold" style="color:#0d6e6e;">CONTRAconnect</h1>
+        <p class="lead text-muted mb-1">Commodity inventory, client encounters &amp; operational cost analytics</p>
+        <p class="small text-muted">Service provider access</p>
+    </div>
+</div>
+
+<div class="row justify-content-center g-4 mt-1">
+    <div class="col-md-6 col-lg-5">
+        <div class="card shadow h-100 border-0">
             <div class="card-body p-4">
-                <div class="text-center mb-4">
-                    <i class="bi bi-heart-pulse text-success" style="font-size: 2.5rem;"></i>
-                    <h3 class="mt-2">CONTRAconnect</h3>
-                    <p class="text-muted small">Commodity & Cost Analytics Platform</p>
+                <div class="text-center mb-3">
+                    <span class="badge bg-success mb-2">SERVICE PROVIDER</span>
+                    <h4 class="mb-1">Provider Sign In</h4>
+                    <p class="text-muted small mb-0">
+                        Stock · Replenishment requests · Client encounters
+                    </p>
                 </div>
-                <form method="post">
+                <form method="post" action="{{ url_for('login') }}" autocomplete="off">
                     <div class="mb-3">
                         <label class="form-label">Email</label>
-                        <input type="email" name="email" class="form-control" required autofocus
-                               placeholder="admin@contraconnect.local">
+                        <input type="email" name="email" class="form-control" required autocomplete="username"
+                               placeholder="your-email@example.com">
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Password</label>
-                        <input type="password" name="password" class="form-control" required>
+                        <div class="input-group">
+                            <input type="password" name="password" id="provPassword" class="form-control" required
+                                   autocomplete="current-password" minlength="8" placeholder="Enter password">
+                            <button class="btn btn-outline-secondary" type="button" id="toggleProvPw"
+                                    title="Show/hide password" aria-label="Show password">
+                                <i class="bi bi-eye" id="provPwIcon"></i>
+                            </button>
+                        </div>
                     </div>
-                    <button type="submit" class="btn btn-success w-100">Sign In</button>
+                    <button type="submit" class="btn btn-success w-100">
+                        <i class="bi bi-box-arrow-in-right"></i> Sign in
+                    </button>
                 </form>
                 <hr>
                 <p class="text-center small mb-0">
-                    Service provider? <a href="{{ url_for('register') }}">Register here</a>
+                    New outlet? <a href="{{ url_for('register') }}">Register as service provider</a>
                 </p>
-                <div class="mt-3 p-2 bg-light rounded small">
-                    <strong>Demo accounts:</strong><br>
-                    Admin: admin@contraconnect.local / admin123<br>
-                    Kiosk: kiosk1@contraconnect.local / provider123<br>
-                    PHC: phc1@contraconnect.local / provider123
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row justify-content-center mt-4">
+    <div class="col-lg-8">
+        <div class="card border-0 bg-white shadow-sm">
+            <div class="card-body py-3">
+                <div class="row text-center g-2 small">
+                    <div class="col-6 col-md-3">
+                        <i class="bi bi-boxes text-success fs-4"></i>
+                        <div class="fw-semibold mt-1">Inventory</div>
+                        <div class="text-muted">Receive · Issue · Balance</div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <i class="bi bi-person-hearts text-success fs-4"></i>
+                        <div class="fw-semibold mt-1">Encounters</div>
+                        <div class="text-muted">Method uptake · Reasons</div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <i class="bi bi-cash-stack text-success fs-4"></i>
+                        <div class="fw-semibold mt-1">Cost analytics</div>
+                        <div class="text-muted">Unit cost · Cost / kiosk</div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <i class="bi bi-graph-up text-success fs-4"></i>
+                        <div class="fw-semibold mt-1">Dashboards</div>
+                        <div class="text-muted">Charts · Reports</div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
+{# Admin access is not advertised on the public landing page. Use /admin-access #}
+{% endblock %}
+{% block extra_js %}
+<script>
+(function () {
+    const btn = document.getElementById('toggleProvPw');
+    const input = document.getElementById('provPassword');
+    const icon = document.getElementById('provPwIcon');
+    if (btn && input) {
+        btn.addEventListener('click', function () {
+            const show = input.type === 'password';
+            input.type = show ? 'text' : 'password';
+            icon.className = show ? 'bi bi-eye-slash' : 'bi bi-eye';
+        });
+    }
+})();
+</script>
 {% endblock %}
