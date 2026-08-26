@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Dispatch Stock – CONTRAconnect{% endblock %}
+{% block content %}
+<h2 class="mb-4">Dispatch Stock to Facility</h2>
+<div class="row">
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-body">
+                <form method="post">
+                    <div class="mb-3">
+                        <label class="form-label">Facility *</label>
+                        <select name="facility_id" class="form-select" required>
+                            <option value="">Select facility…</option>
+                            {% for f in facilities %}
+                            <option value="{{ f.id }}">{{ f.name }} ({{ f.facility_type }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Product *</label>
+                        <select name="product_id" class="form-select" required>
+                            <option value="">Select product…</option>
+                            {% for p in products %}
+                            <option value="{{ p.id }}">{{ p.name }} — ₦{{ '%.2f'|format(p.unit_cost) }} / {{ p.unit }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Quantity *</label>
+                        <input type="number" name="quantity" class="form-control" min="1" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Notes</label>
+                        <textarea name="notes" class="form-control" rows="2"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-success">Dispatch</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
