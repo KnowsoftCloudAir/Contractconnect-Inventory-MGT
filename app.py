@@ -26,10 +26,14 @@ from sqlalchemy.orm import joinedload
 # ---------------------------------------------------------------------------
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'contraconnect-dev-secret-change-me')
-# Prefer /tmp in constrained environments; set DATABASE_URL for production
-_default_db = 'sqlite:////tmp/contraconnect.db'
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', _default_db)
+
+# Database URL (Render Postgres uses postgres:// — SQLAlchemy needs postgresql://)
+_db_url = os.environ.get('DATABASE_URL', 'sqlite:////tmp/contraconnect.db')
+if _db_url.startswith('postgres://'):
+    _db_url = _db_url.replace('postgres://', 'postgresql://', 1)
+app.config['SQLALCHEMY_DATABASE_URI'] = _db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {'pool_pre_ping': True}
 
 try:
     os.makedirs(app.instance_path, exist_ok=True)
@@ -40,6 +44,26 @@ db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 login_manager.login_message_category = 'warning'
+
+# Create tables (and seed once) under Gunicorn / Render — safe to call repeatedly
+_db_ready = False
+
+def ensure_db():
+    global _db_ready
+    if _db_ready:
+        return
+    try:
+        db.create_all()
+        if not User.query.filter_by(email='admin@contraconnect.local').first():
+            seed_data()
+        _db_ready = True
+    except Exception as e:
+        app.logger.exception('ensure_db failed: %s', e)
+
+
+@app.before_request
+def _before_request_init_db():
+    ensure_db()
 
 
 # ---------------------------------------------------------------------------
@@ -409,33 +433,52 @@ def register():
         facility_type = request.form.get('facility_type', 'kiosk')
         phone = request.form.get('phone', '').strip()
 
-        if User.query.filter_by(email=email).first():
-            flash('Email already registered.', 'warning')
+        # Basic validation
+        if not email or not full_name or not password or not facility_name:
+            flash('Please fill in all required fields (Name, Email, Password, Facility).', 'danger')
+            return redirect(url_for('register'))
+        if len(password) < 6:
+            flash('Password must be at least 6 characters.', 'danger')
             return redirect(url_for('register'))
 
-        # Create facility first
-        fac = Facility(
-            name=facility_name,
-            facility_type=facility_type,
-            contact_person=full_name,
-            phone=phone,
-            is_active=False  # admin activates later
-        )
-        db.session.add(fac)
-        db.session.flush()
+        try:
+            if User.query.filter_by(email=email).first():
+                flash('Email already registered.', 'warning')
+                return redirect(url_for('register'))
 
-        user = User(
-            email=email,
-            full_name=full_name,
-            role='provider',
-            facility_id=fac.id,
-            is_active=False  # pending approval
-        )
-        user.set_password(password)
-        db.session.add(user)
-        db.session.commit()
-        flash('Registration submitted. An administrator will activate your account.', 'success')
-        return redirect(url_for('login'))
+            # Create facility first
+            fac = Facility(
+                name=facility_name,
+                facility_type=facility_type or 'kiosk',
+                contact_person=full_name,
+                phone=phone,
+                is_active=False  # admin activates later
+            )
+            db.session.add(fac)
+            db.session.flush()
+
+            user = User(
+                email=email,
+                full_name=full_name,
+                role='provider',
+                facility_id=fac.id,
+                is_active=False  # pending approval
+            )
+            user.set_password(password)
+            db.session.add(user)
+            db.session.commit()
+            flash('Registration submitted. An administrator will activate your account.', 'success')
+            return redirect(url_for('login'))
+        except Exception as e:
+            db.session.rollback()
+            app.logger.exception('Registration failed: %s', e)
+            flash(
+                'Registration failed due to a server error. '
+                'Please try again or contact the administrator. '
+                f'(Hint: check that the database is configured on the host.)',
+                'danger'
+            )
+            return redirect(url_for('register'))
     return render_template('register.html')
 
 
