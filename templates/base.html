@@ -87,16 +87,38 @@
             {% if current_user.is_authenticated %}
             <nav class="col-md-2 d-none d-md-block sidebar py-3">
                 <ul class="nav flex-column">
-                    {% if current_user.role == 'admin' %}
+                    {% if current_user.role in ['general_admin', 'program_admin', 'finance_admin', 'admin'] %}
+                    {% if current_user.role != 'finance_admin' %}
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_dashboard' %}active{% endif %}" href="{{ url_for('admin_dashboard') }}"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
+                    {% endif %}
+                    {% if current_user.role in ['general_admin', 'finance_admin', 'admin', 'program_admin'] %}
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_costs' %}active{% endif %}" href="{{ url_for('admin_costs') }}"><i class="bi bi-cash-stack"></i> Cost Analytics</a></li>
+                    {% endif %}
+                    {% if current_user.role != 'finance_admin' %}
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_facilities' %}active{% endif %}" href="{{ url_for('admin_facilities') }}"><i class="bi bi-building"></i> Facilities</a></li>
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_products' %}active{% endif %}" href="{{ url_for('admin_products') }}"><i class="bi bi-box-seam"></i> Products</a></li>
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_dispatch' %}active{% endif %}" href="{{ url_for('admin_dispatch') }}"><i class="bi bi-truck"></i> Dispatch Stock</a></li>
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_requests' %}active{% endif %}" href="{{ url_for('admin_requests') }}"><i class="bi bi-clipboard-check"></i> Requests</a></li>
+                    {% endif %}
+                    {% if current_user.role in ['general_admin', 'finance_admin', 'admin'] %}
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_expenditures' %}active{% endif %}" href="{{ url_for('admin_expenditures') }}"><i class="bi bi-journal-text"></i> Ledgers</a></li>
                     <li class="nav-item"><a class="nav-link" href="{{ url_for('export_financial_excel', days=90) }}"><i class="bi bi-file-earmark-excel"></i> Export financial</a></li>
+                    {% endif %}
+                    {% if current_user.role != 'finance_admin' %}
                     <li class="nav-item"><a class="nav-link" href="{{ url_for('export_full_excel') }}"><i class="bi bi-download"></i> Export full data</a></li>
+                    {% endif %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link" href="#"><i class="bi bi-file-earmark-bar-graph"></i> Reports</a>
+                    </li>
+                    <li class="nav-item ps-3"><a class="nav-link py-1" href="{{ url_for('admin_period_report', period='monthly', fmt='pdf') }}"><i class="bi bi-filetype-pdf"></i> Monthly PDF</a></li>
+                    <li class="nav-item ps-3"><a class="nav-link py-1" href="{{ url_for('admin_period_report', period='monthly', fmt='pptx') }}"><i class="bi bi-filetype-ppt"></i> Monthly PPT</a></li>
+                    <li class="nav-item ps-3"><a class="nav-link py-1" href="{{ url_for('admin_period_report', period='quarterly', fmt='pdf') }}"><i class="bi bi-filetype-pdf"></i> Quarterly PDF</a></li>
+                    <li class="nav-item ps-3"><a class="nav-link py-1" href="{{ url_for('admin_period_report', period='quarterly', fmt='pptx') }}"><i class="bi bi-filetype-ppt"></i> Quarterly PPT</a></li>
+                    <li class="nav-item ps-3"><a class="nav-link py-1" href="{{ url_for('admin_period_report', period='yearly', fmt='pdf') }}"><i class="bi bi-filetype-pdf"></i> Yearly PDF</a></li>
+                    <li class="nav-item ps-3"><a class="nav-link py-1" href="{{ url_for('admin_period_report', period='yearly', fmt='pptx') }}"><i class="bi bi-filetype-ppt"></i> Yearly PPT</a></li>
+                    {% if current_user.role in ['general_admin', 'admin'] %}
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_manage_users' %}active{% endif %}" href="{{ url_for('admin_manage_users') }}"><i class="bi bi-people-fill"></i> Admin rights</a></li>
+                    {% endif %}
                     {% else %}
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'provider_dashboard' %}active{% endif %}" href="{{ url_for('provider_dashboard') }}"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'provider_stock' %}active{% endif %}" href="{{ url_for('provider_stock') }}"><i class="bi bi-boxes"></i> My Stock</a></li>

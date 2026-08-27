@@ -39,6 +39,29 @@
                 <p class="mb-0"><strong>Registered:</strong> {{ facility.created_at.strftime('%Y-%m-%d') if facility.created_at else '—' }}</p>
             </div>
         </div>
+
+        <div class="card mt-3">
+            <div class="card-header bg-white fw-semibold">Assign real provider to this facility</div>
+            <div class="card-body">
+                <p class="small text-muted">Creates or reassigns a provider account (updates password). Does not add dummy stock or encounters.</p>
+                <form method="post" action="{{ url_for('admin_assign_facility_user', fid=facility.id) }}">
+                    <div class="mb-2">
+                        <input type="text" name="full_name" class="form-control form-control-sm" placeholder="Full name *" required>
+                    </div>
+                    <div class="mb-2">
+                        <input type="email" name="email" class="form-control form-control-sm" placeholder="Email *" required>
+                    </div>
+                    <div class="mb-2">
+                        <input type="text" name="phone" class="form-control form-control-sm" placeholder="Phone">
+                    </div>
+                    <div class="mb-2">
+                        <input type="password" name="password" class="form-control form-control-sm" placeholder="Password (min 8) *" required minlength="8" autocomplete="new-password">
+                    </div>
+                    <button class="btn btn-sm btn-primary w-100">Assign / update provider</button>
+                </form>
+            </div>
+        </div>
+
     </div>
     <div class="col-md-8">
         <div class="card h-100">

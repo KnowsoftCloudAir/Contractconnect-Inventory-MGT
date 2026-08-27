@@ -16,6 +16,18 @@ from io import BytesIO
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
+import tempfile
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+from pptx import Presentation
+from pptx.util import Inches, Pt
+from pptx.dml.color import RGBColor
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage, PageBreak
+from reportlab.lib.units import inch
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import (
     LoginManager, UserMixin, login_user, logout_user,
@@ -82,7 +94,7 @@ def ensure_db():
         return
     try:
         db.create_all()
-        if not User.query.filter_by(email='admin@contraconnect.local').first():
+        if not User.query.filter(User.role.in_(['general_admin', 'admin'])).first():
             seed_data()
         _db_ready = True
     except Exception as e:
@@ -103,7 +115,7 @@ class User(UserMixin, db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
     full_name = db.Column(db.String(120), nullable=False)
-    role = db.Column(db.String(20), nullable=False, default='provider')  # admin | provider
+    role = db.Column(db.String(40), nullable=False, default='provider')  # provider | general_admin | program_admin | finance_admin
     facility_id = db.Column(db.Integer, db.ForeignKey('facilities.id'), nullable=True)
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -277,23 +289,82 @@ def load_user(user_id):
     return db.session.get(User, int(user_id))
 
 
+# Admin role hierarchy
+ADMIN_ROLES = ('general_admin', 'program_admin', 'finance_admin', 'admin')  # 'admin' legacy = general
+FINANCE_ROLES = ('general_admin', 'finance_admin', 'admin')
+PROGRAM_ROLES = ('general_admin', 'program_admin', 'admin')  # ops without restricting finance view for program
+
+
+def _is_admin_role(role):
+    return role in ADMIN_ROLES
+
+
+def _can_export_financial(role):
+    return role in FINANCE_ROLES or role == 'admin'
+
+
+def _can_manage_admins(role):
+    return role in ('general_admin', 'admin')
+
+
 def admin_required(f):
+    """Any admin role."""
     @wraps(f)
     def decorated(*args, **kwargs):
-        if not current_user.is_authenticated or current_user.role != 'admin':
+        if not current_user.is_authenticated or not _is_admin_role(current_user.role):
             flash('Admin access required.', 'danger')
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated
 
 
+def general_admin_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not current_user.is_authenticated or not _can_manage_admins(current_user.role):
+            flash('General Admin access required.', 'danger')
+            return redirect(url_for('index'))
+        return f(*args, **kwargs)
+    return decorated
+
+
+def finance_access_required(f):
+    """Finance dashboard + financial downloads: General Admin and Finance Admin."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not current_user.is_authenticated or not _can_export_financial(current_user.role):
+            flash('Finance access required. Program Admins cannot download financial data.', 'danger')
+            return redirect(url_for('index'))
+        return f(*args, **kwargs)
+    return decorated
+
+
+def program_ops_required(f):
+    """Program operations (facilities, stock, encounters): General + Program admin (not Finance-only)."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not current_user.is_authenticated:
+            return redirect(url_for('login'))
+        if current_user.role in ('general_admin', 'program_admin', 'admin'):
+            return f(*args, **kwargs)
+        if current_user.role == 'finance_admin':
+            flash('Program operations are not available to Finance Admin.', 'warning')
+            return redirect(url_for('admin_costs'))
+        flash('Admin access required.', 'danger')
+        return redirect(url_for('login'))
+    return decorated
+
+
 def provider_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        if not current_user.is_authenticated or current_user.role not in ('admin', 'provider'):
+        if not current_user.is_authenticated:
             flash('Login required.', 'danger')
             return redirect(url_for('login'))
-        return f(*args, **kwargs)
+        if current_user.role == 'provider' or _is_admin_role(current_user.role):
+            return f(*args, **kwargs)
+        flash('Login required.', 'danger')
+        return redirect(url_for('login'))
     return decorated
 
 
@@ -439,7 +510,9 @@ def get_refusal_reasons(start_date=None, end_date=None):
 @app.route('/')
 def index():
     if current_user.is_authenticated:
-        if current_user.role == 'admin':
+        if _is_admin_role(current_user.role):
+            if current_user.role == 'finance_admin':
+                return redirect(url_for('admin_costs'))
             return redirect(url_for('admin_dashboard'))
         return redirect(url_for('provider_dashboard'))
     return redirect(url_for('login'))
@@ -454,8 +527,7 @@ def login():
         password = request.form.get('password', '')
         user = User.query.filter_by(email=email, is_active=True).first()
         if user and user.check_password(password):
-            if user.role == 'admin':
-                # Do not allow admin via public provider login
+            if _is_admin_role(user.role):
                 flash('Please use the authorised admin access page.', 'warning')
                 return redirect(url_for('admin_access'))
             login_user(user, remember=True)
@@ -483,10 +555,12 @@ def admin_access():
     if request.method == 'POST':
         email = request.form.get('email', '').strip().lower()
         password = request.form.get('password', '')
-        user = User.query.filter_by(email=email, is_active=True, role='admin').first()
-        if user and user.check_password(password):
-            login_user(user, remember=False)  # do not persist admin session long-term
-            flash(f'Welcome, {user.full_name}.', 'success')
+        user = User.query.filter_by(email=email, is_active=True).first()
+        if user and _is_admin_role(user.role) and user.check_password(password):
+            login_user(user, remember=False)
+            flash(f'Welcome, {user.full_name} ({user.role.replace("_", " ").title()}).', 'success')
+            if user.role == 'finance_admin':
+                return redirect(url_for('admin_costs'))
             return redirect(url_for('admin_dashboard'))
         # Generic message — do not reveal whether email exists
         flash('Invalid credentials or unauthorised access.', 'danger')
@@ -512,7 +586,7 @@ def change_password():
             flash('New password and confirmation do not match.', 'danger')
             return redirect(url_for('change_password'))
 
-        require_strong = current_user.role == 'admin'
+        require_strong = _is_admin_role(current_user.role)
         min_len = 10 if require_strong else 8
         ok, msg = validate_password_strength(new_pw, min_length=min_len, require_strong=require_strong)
         if not ok:
@@ -917,7 +991,7 @@ def _autosize(ws, max_width=40):
 
 @app.route('/admin/export/financial')
 @login_required
-@admin_required
+@finance_access_required
 def export_financial_excel():
     """Excel report for financial analysis: unit cost, per-kiosk costs, ledgers, method commodity cost."""
     days = int(request.args.get('days', 90))
@@ -1011,6 +1085,8 @@ def export_financial_excel():
 @admin_required
 def export_full_excel():
     """Complete operational data dump: facilities, users, stock, transactions, encounters, requests, messages, expenditures."""
+    if current_user.role == 'finance_admin':
+        return redirect(url_for('export_financial_excel'))
     wb = Workbook()
 
     # Facilities
@@ -1357,6 +1433,355 @@ def provider_messages():
     return render_template('provider_messages.html', facility=fac, messages=messages)
 
 
+
+# ---------------------------------------------------------------------------
+# General Admin — manage other admin accounts
+# ---------------------------------------------------------------------------
+@app.route('/admin/users', methods=['GET', 'POST'])
+@login_required
+@general_admin_required
+def admin_manage_users():
+    """Create / activate / deactivate Program and Finance admins."""
+    if request.method == 'POST':
+        action = request.form.get('action', 'create')
+        if action == 'create':
+            email = request.form.get('email', '').strip().lower()
+            full_name = request.form.get('full_name', '').strip()
+            role = request.form.get('role', 'program_admin')
+            password = request.form.get('password', '')
+            if role not in ('program_admin', 'finance_admin', 'general_admin'):
+                flash('Invalid role.', 'danger')
+                return redirect(url_for('admin_manage_users'))
+            if User.query.filter_by(email=email).first():
+                flash('Email already in use.', 'warning')
+                return redirect(url_for('admin_manage_users'))
+            ok, msg = validate_password_strength(password, min_length=10, require_strong=True)
+            if not ok:
+                flash(msg, 'danger')
+                return redirect(url_for('admin_manage_users'))
+            u = User(email=email, full_name=full_name, role=role, is_active=True)
+            u.set_password(password)
+            db.session.add(u)
+            db.session.commit()
+            flash(f'{role.replace("_", " ").title()} created: {email}', 'success')
+        elif action == 'toggle':
+            uid = int(request.form.get('user_id'))
+            u = db.session.get(User, uid)
+            if not u or not _is_admin_role(u.role):
+                flash('Invalid admin user.', 'danger')
+            elif u.id == current_user.id:
+                flash('You cannot deactivate your own account.', 'warning')
+            else:
+                u.is_active = not u.is_active
+                db.session.commit()
+                state = 'activated' if u.is_active else 'deactivated'
+                flash(f'{u.full_name} {state}.', 'success')
+        elif action == 'set_role':
+            uid = int(request.form.get('user_id'))
+            role = request.form.get('role')
+            u = db.session.get(User, uid)
+            if not u or not _is_admin_role(u.role):
+                flash('Invalid admin user.', 'danger')
+            elif u.id == current_user.id:
+                flash('You cannot change your own role here.', 'warning')
+            elif role not in ('program_admin', 'finance_admin', 'general_admin'):
+                flash('Invalid role.', 'danger')
+            else:
+                u.role = role
+                db.session.commit()
+                flash(f'Role updated for {u.full_name}.', 'success')
+        return redirect(url_for('admin_manage_users'))
+
+    admins = User.query.filter(User.role.in_(list(ADMIN_ROLES))).order_by(User.created_at.desc()).all()
+    return render_template('admin_users.html', admins=admins)
+
+
+@app.route('/admin/facilities/<int:fid>/assign-user', methods=['POST'])
+@login_required
+@program_ops_required
+def admin_assign_facility_user(fid):
+    """Assign or create a real provider user for a facility (no dummy data)."""
+    fac = db.session.get(Facility, fid)
+    if not fac:
+        abort(404)
+    email = request.form.get('email', '').strip().lower()
+    full_name = request.form.get('full_name', '').strip()
+    password = request.form.get('password', '').strip()
+    phone = request.form.get('phone', '').strip()
+    if not email or not full_name or not password:
+        flash('Name, email and password are required.', 'danger')
+        return redirect(url_for('admin_facility_detail', fid=fid))
+    ok, msg = validate_password_strength(password, min_length=8, require_strong=False)
+    if not ok:
+        flash(msg, 'danger')
+        return redirect(url_for('admin_facility_detail', fid=fid))
+    existing = User.query.filter_by(email=email).first()
+    if existing:
+        if existing.role != 'provider':
+            flash('Email belongs to a non-provider account.', 'danger')
+            return redirect(url_for('admin_facility_detail', fid=fid))
+        existing.facility_id = fac.id
+        existing.full_name = full_name
+        existing.is_active = fac.is_active
+        existing.set_password(password)
+        user = existing
+    else:
+        user = User(email=email, full_name=full_name, role='provider', facility_id=fac.id, is_active=fac.is_active)
+        user.set_password(password)
+        db.session.add(user)
+    fac.contact_person = full_name
+    if phone:
+        fac.phone = phone
+    db.session.commit()
+    flash(f'Provider {user.email} assigned to {fac.name}. Share the password securely.', 'success')
+    return redirect(url_for('admin_facility_detail', fid=fid))
+
+
+# ---------------------------------------------------------------------------
+# Period reports — PowerPoint + PDF
+# ---------------------------------------------------------------------------
+def _period_bounds(period):
+    end = datetime.utcnow().date()
+    if period == 'monthly':
+        start = end.replace(day=1)
+        label = end.strftime('%B %Y')
+    elif period == 'quarterly':
+        q = (end.month - 1) // 3
+        start = end.replace(month=q * 3 + 1, day=1)
+        label = f'Q{q+1} {end.year}'
+    elif period == 'yearly':
+        start = end.replace(month=1, day=1)
+        label = str(end.year)
+    else:
+        start = end - timedelta(days=90)
+        label = f'{start.isoformat()} to {end.isoformat()}'
+    return start, end, label
+
+
+def _make_chart_images(cost_data, uptake, tmpdir):
+    paths = {}
+    # Uptake doughnut-like bar
+    if uptake:
+        fig, ax = plt.subplots(figsize=(6, 3.5))
+        ax.bar([u['method'][:18] for u in uptake], [u['count'] for u in uptake], color='#0d6e6e')
+        ax.set_title('Method uptake')
+        ax.tick_params(axis='x', rotation=30)
+        fig.tight_layout()
+        p = f'{tmpdir}/uptake.png'
+        fig.savefig(p, dpi=120)
+        plt.close(fig)
+        paths['uptake'] = p
+    if cost_data.get('per_kiosk'):
+        fig, ax = plt.subplots(figsize=(6, 3.5))
+        names = [k['name'][:20] for k in cost_data['per_kiosk']]
+        vals = [k['operating_cost'] for k in cost_data['per_kiosk']]
+        ax.bar(names, vals, color='#e85d04')
+        ax.set_title('Operating cost by facility')
+        ax.tick_params(axis='x', rotation=25)
+        fig.tight_layout()
+        p = f'{tmpdir}/kiosk_cost.png'
+        fig.savefig(p, dpi=120)
+        plt.close(fig)
+        paths['kiosk'] = p
+    if cost_data.get('method_stats'):
+        fig, ax = plt.subplots(figsize=(5, 5))
+        labels = [m['method_code'] for m in cost_data['method_stats']]
+        sizes = [m['commodity_cost'] or 0.01 for m in cost_data['method_stats']]
+        ax.pie(sizes, labels=labels, autopct='%1.0f%%', colors=['#0d6e6e','#e85d04','#198754','#0d6efd','#6f42c1','#dc3545'])
+        ax.set_title('Commodity cost by method')
+        fig.tight_layout()
+        p = f'{tmpdir}/method_cost.png'
+        fig.savefig(p, dpi=120)
+        plt.close(fig)
+        paths['method'] = p
+    return paths
+
+
+@app.route('/admin/reports/<period>/<fmt>')
+@login_required
+@admin_required
+def admin_period_report(period, fmt):
+    """Monthly / quarterly / yearly report as pptx or pdf."""
+    if period not in ('monthly', 'quarterly', 'yearly'):
+        abort(404)
+    if fmt not in ('pptx', 'pdf'):
+        abort(404)
+    # Finance-only admins can get reports; program admins can too (ops + charts)
+    start, end, label = _period_bounds(period)
+    cost_data = compute_cost_metrics(start, end)
+    uptake = get_method_uptake(start, end)
+    facilities = Facility.query.order_by(Facility.name).all()
+    fac_rows = []
+    for f in facilities:
+        clients = db.session.query(func.count(ClientEncounter.id)).filter(
+            ClientEncounter.facility_id == f.id,
+            ClientEncounter.encounter_date.between(start, end),
+            ClientEncounter.outcome.in_(['accepted', 'discontinued']),
+        ).scalar() or 0
+        fac_rows.append({
+            'name': f.name, 'type': f.facility_type, 'active': f.is_active,
+            'clients': clients, 'contact': f.contact_person or '',
+        })
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        charts = _make_chart_images(cost_data, uptake, tmpdir)
+        if fmt == 'pptx':
+            return _build_pptx_report(label, period, cost_data, uptake, fac_rows, charts, start, end)
+        return _build_pdf_report(label, period, cost_data, uptake, fac_rows, charts, start, end)
+
+
+def _build_pptx_report(label, period, cost_data, uptake, fac_rows, charts, start, end):
+    prs = Presentation()
+    prs.slide_width = Inches(13.333)
+    prs.slide_height = Inches(7.5)
+
+    def add_title_slide(title, subtitle):
+        layout = prs.slide_layouts[6]  # blank
+        slide = prs.slides.add_slide(layout)
+        box = slide.shapes.add_textbox(Inches(0.8), Inches(2.5), Inches(11.5), Inches(1.5))
+        tf = box.text_frame
+        p = tf.paragraphs[0]
+        p.text = title
+        p.font.size = Pt(32)
+        p.font.bold = True
+        p.font.color.rgb = RGBColor(0x0D, 0x6E, 0x6E)
+        box2 = slide.shapes.add_textbox(Inches(0.8), Inches(4.0), Inches(11.5), Inches(1))
+        box2.text_frame.paragraphs[0].text = subtitle
+        box2.text_frame.paragraphs[0].font.size = Pt(16)
+
+    def add_section(title):
+        layout = prs.slide_layouts[6]
+        slide = prs.slides.add_slide(layout)
+        box = slide.shapes.add_textbox(Inches(0.5), Inches(0.3), Inches(12), Inches(0.6))
+        box.text_frame.paragraphs[0].text = title
+        box.text_frame.paragraphs[0].font.size = Pt(22)
+        box.text_frame.paragraphs[0].font.bold = True
+        return slide
+
+    add_title_slide(
+        f'CONTRAconnect {period.title()} Report',
+        f'{label}  |  {start.isoformat()} → {end.isoformat()}  |  Generated {datetime.utcnow().strftime("%Y-%m-%d %H:%M")} UTC'
+    )
+
+    # Dashboard KPIs
+    slide = add_section('Admin dashboard — key indicators')
+    kpis = [
+        f"Clients served: {cost_data['total_clients']}",
+        f"Operational cost: {cost_data['total_operational_cost']:,.2f}",
+        f"Platform build (separate): {cost_data['platform_build_cost']:,.2f}",
+        f"Unit cost / client: {cost_data['unit_cost_per_client']:,.2f}",
+    ]
+    box = slide.shapes.add_textbox(Inches(0.5), Inches(1.2), Inches(12), Inches(2))
+    tf = box.text_frame
+    tf.word_wrap = True
+    for i, line in enumerate(kpis):
+        p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
+        p.text = '• ' + line
+        p.font.size = Pt(18)
+    if charts.get('uptake'):
+        slide.shapes.add_picture(charts['uptake'], Inches(0.5), Inches(3.5), width=Inches(6))
+    if charts.get('kiosk'):
+        slide.shapes.add_picture(charts['kiosk'], Inches(6.8), Inches(3.5), width=Inches(6))
+
+    # Cost analysis
+    slide = add_section('Cost analysis')
+    box = slide.shapes.add_textbox(Inches(0.5), Inches(1.0), Inches(12), Inches(1.5))
+    tf = box.text_frame
+    tf.paragraphs[0].text = (
+        f"Unit cost per client = total operational cost ÷ clients served. "
+        f"Platform build costs are tracked separately and excluded from unit cost."
+    )
+    tf.paragraphs[0].font.size = Pt(14)
+    if charts.get('method'):
+        slide.shapes.add_picture(charts['method'], Inches(0.5), Inches(2.5), width=Inches(5))
+    if charts.get('kiosk'):
+        slide.shapes.add_picture(charts['kiosk'], Inches(6.5), Inches(2.5), width=Inches(6))
+
+    # Facilities summary
+    slide = add_section('Facilities summary')
+    rows = [['Facility', 'Type', 'Active', 'Clients in period', 'Contact']]
+    for r in fac_rows:
+        rows.append([r['name'], r['type'], 'Yes' if r['active'] else 'No', str(r['clients']), r['contact']])
+    # simple text table
+    box = slide.shapes.add_textbox(Inches(0.5), Inches(1.1), Inches(12), Inches(5.5))
+    tf = box.text_frame
+    tf.word_wrap = True
+    for i, row in enumerate(rows[:18]):
+        p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
+        p.text = ' | '.join(row)
+        p.font.size = Pt(12 if i else 13)
+        p.font.bold = (i == 0)
+
+    buf = BytesIO()
+    prs.save(buf)
+    buf.seek(0)
+    fname = f'CONTRAconnect_{period}_{label.replace(" ", "_")}.pptx'
+    return send_file(buf, as_attachment=True, download_name=fname,
+                     mimetype='application/vnd.openxmlformats-officedocument.presentationml.presentation')
+
+
+def _build_pdf_report(label, period, cost_data, uptake, fac_rows, charts, start, end):
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=landscape(A4), leftMargin=0.6*inch, rightMargin=0.6*inch,
+                            topMargin=0.5*inch, bottomMargin=0.5*inch)
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle('T', parent=styles['Heading1'], textColor=colors.HexColor('#0d6e6e'))
+    story = []
+    story.append(Paragraph(f'CONTRAconnect {period.title()} Report — {label}', title_style))
+    story.append(Paragraph(f'Period: {start.isoformat()} to {end.isoformat()}', styles['Normal']))
+    story.append(Spacer(1, 12))
+    story.append(Paragraph('Key indicators', styles['Heading2']))
+    data = [
+        ['Metric', 'Value'],
+        ['Clients served', str(cost_data['total_clients'])],
+        ['Total operational cost', f"{cost_data['total_operational_cost']:,.2f}"],
+        ['Platform build cost (separate)', f"{cost_data['platform_build_cost']:,.2f}"],
+        ['Unit cost per client', f"{cost_data['unit_cost_per_client']:,.2f}"],
+    ]
+    t = Table(data, colWidths=[3.5*inch, 2.5*inch])
+    t.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0d6e6e')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f0f7f7')]),
+    ]))
+    story.append(t)
+    story.append(Spacer(1, 14))
+    if charts.get('uptake'):
+        story.append(Paragraph('Method uptake', styles['Heading2']))
+        story.append(RLImage(charts['uptake'], width=5.5*inch, height=3.2*inch))
+    if charts.get('kiosk'):
+        story.append(Paragraph('Operating cost by facility', styles['Heading2']))
+        story.append(RLImage(charts['kiosk'], width=5.5*inch, height=3.2*inch))
+    story.append(PageBreak())
+    story.append(Paragraph('Cost analysis', styles['Heading2']))
+    story.append(Paragraph(
+        'Unit cost per client = operational cost ÷ clients. Platform build costs are excluded from unit cost.',
+        styles['Normal']))
+    if charts.get('method'):
+        story.append(RLImage(charts['method'], width=4*inch, height=4*inch))
+    story.append(Spacer(1, 12))
+    story.append(Paragraph('Facilities summary', styles['Heading2']))
+    fdata = [['Facility', 'Type', 'Active', 'Clients', 'Contact']]
+    for r in fac_rows:
+        fdata.append([r['name'], r['type'], 'Yes' if r['active'] else 'No', str(r['clients']), r['contact'][:30]])
+    ft = Table(fdata, colWidths=[2.2*inch, 1*inch, 0.8*inch, 1*inch, 2*inch])
+    ft.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0d6e6e')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('GRID', (0, 0), (-1, -1), 0.4, colors.grey),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+    ]))
+    story.append(ft)
+    doc.build(story)
+    buf.seek(0)
+    fname = f'CONTRAconnect_{period}_{label.replace(" ", "_")}.pdf'
+    return send_file(buf, as_attachment=True, download_name=fname, mimetype='application/pdf')
+
+
+
 # ---------------------------------------------------------------------------
 # API endpoints for charts (JSON)
 # ---------------------------------------------------------------------------
@@ -1381,15 +1806,29 @@ def api_method_uptake():
 # ---------------------------------------------------------------------------
 # Seed data for demo
 # ---------------------------------------------------------------------------
+
 def seed_data():
-    if User.query.filter_by(email='admin@contraconnect.local').first():
+    """
+    Bootstrap master data only — no dummy encounters/expenditures in production.
+    Creates:
+      - 1 General Admin (password from ADMIN_PASSWORD or default strong password)
+      - Product catalogue
+      - 3 empty facilities ready to assign to real providers (no fake clients/costs)
+    Set SEED_DEMO_DATA=1 to also load sample encounters for training demos.
+    """
+    if User.query.filter(User.role.in_(['general_admin', 'admin'])).first():
         return
 
-    admin = User(email='admin@contraconnect.local', full_name='System Administrator', role='admin', is_active=True)
-    admin.set_password(os.environ.get('ADMIN_PASSWORD', 'Contra@Admin2026!'))
+    admin_pw = os.environ.get('ADMIN_PASSWORD', 'Contra@Admin2026!')
+    admin = User(
+        email=os.environ.get('ADMIN_EMAIL', 'admin@contraconnect.local'),
+        full_name='General Administrator',
+        role='general_admin',
+        is_active=True,
+    )
+    admin.set_password(admin_pw)
     db.session.add(admin)
 
-    # Sample products
     products = [
         Product(name='Copper IUD', method_code='IUD', unit='piece', unit_cost=Decimal('8.50')),
         Product(name='Levonorgestrel Implant', method_code='Implant', unit='set', unit_cost=Decimal('18.00')),
@@ -1400,84 +1839,53 @@ def seed_data():
     ]
     db.session.add_all(products)
 
-    # Sample facilities
-    fac1 = Facility(name='Central Market Kiosk', facility_type='kiosk', address='Market Road', contact_person='Amina Yusuf', phone='08012345678', target_clients_monthly=120, is_active=True)
-    fac2 = Facility(name='PHC Riverside', facility_type='phc', address='Riverside Avenue', contact_person='Dr. Okonkwo', phone='08098765432', target_clients_monthly=300, is_active=True)
-    fac3 = Facility(name='Youth Hub Kiosk', facility_type='kiosk', address='Campus Gate', contact_person='Chinedu Eze', phone='08055554444', target_clients_monthly=80, is_active=True)
+    # Three real-world-ready facilities (no dummy users — assign later via registration or admin)
+    fac1 = Facility(
+        name='Central Market Kiosk', facility_type='kiosk', address='Market Road',
+        city='Pilot City', contact_person='', phone='', target_clients_monthly=120, is_active=True,
+    )
+    fac2 = Facility(
+        name='PHC Riverside', facility_type='phc', address='Riverside Avenue',
+        city='Pilot City', contact_person='', phone='', target_clients_monthly=300, is_active=True,
+    )
+    fac3 = Facility(
+        name='Youth Hub Kiosk', facility_type='kiosk', address='Campus Gate',
+        city='Pilot City', contact_person='', phone='', target_clients_monthly=80, is_active=True,
+    )
     db.session.add_all([fac1, fac2, fac3])
-    db.session.flush()
-
-    # Provider users
-    p1 = User(email='kiosk1@contraconnect.local', full_name='Amina Yusuf', role='provider', facility_id=fac1.id, is_active=True)
-    p1.set_password(os.environ.get('PROVIDER_PASSWORD', 'Provider@2026'))
-    p2 = User(email='phc1@contraconnect.local', full_name='Dr. Okonkwo', role='provider', facility_id=fac2.id, is_active=True)
-    p2.set_password(os.environ.get('PROVIDER_PASSWORD', 'Provider@2026'))
-    db.session.add_all([p1, p2])
-
     db.session.commit()
 
-    # Initial stock for fac1 & fac2
-    for fac in [fac1, fac2]:
+    # Optional demo data only when explicitly enabled
+    if os.environ.get('SEED_DEMO_DATA', '').strip() in ('1', 'true', 'yes'):
+        _seed_demo_activity(admin, products, [fac1, fac2, fac3])
+    print('Seed data created (clean facilities + catalogue + general admin).')
+
+
+def _seed_demo_activity(admin, products, facilities):
+    """Optional demo encounters — off by default so real data is not polluted."""
+    import random
+    fac1, fac2 = facilities[0], facilities[1]
+    prov_pw = os.environ.get('PROVIDER_PASSWORD', 'Provider@2026')
+    p1 = User(email='kiosk1@contraconnect.local', full_name='Demo Kiosk User', role='provider',
+              facility_id=fac1.id, is_active=True)
+    p1.set_password(prov_pw)
+    p2 = User(email='phc1@contraconnect.local', full_name='Demo PHC User', role='provider',
+              facility_id=fac2.id, is_active=True)
+    p2.set_password(prov_pw)
+    db.session.add_all([p1, p2])
+    fac1.contact_person = p1.full_name
+    fac2.contact_person = p2.full_name
+    for fac in (fac1, fac2):
         for prod in products:
             qty = 50 if prod.method_code != 'Condom' else 500
-            stock = StockItem(facility_id=fac.id, product_id=prod.id, quantity_on_hand=qty, reorder_level=15)
-            db.session.add(stock)
-            tx = StockTransaction(
+            db.session.add(StockItem(facility_id=fac.id, product_id=prod.id, quantity_on_hand=qty, reorder_level=15))
+            db.session.add(StockTransaction(
                 facility_id=fac.id, product_id=prod.id, transaction_type='receipt',
-                quantity=qty, unit_cost=prod.unit_cost, reference='SEED', created_by=admin.id
-            )
-            db.session.add(tx)
-
-    # Sample expenditures
-    today = datetime.utcnow().date()
-    exps = [
-        Expenditure(facility_id=fac1.id, category='staff', description='Kiosk attendant stipend', amount=Decimal('25000'), expenditure_date=today - timedelta(days=10), created_by=admin.id),
-        Expenditure(facility_id=fac1.id, category='logistics', description='Last-mile delivery', amount=Decimal('8500'), expenditure_date=today - timedelta(days=5), created_by=admin.id),
-        Expenditure(facility_id=fac2.id, category='staff', description='Nurse overtime', amount=Decimal('42000'), expenditure_date=today - timedelta(days=8), created_by=admin.id),
-        Expenditure(facility_id=None, category='platform_build', description='Platform development phase 1', amount=Decimal('1500000'), expenditure_date=today - timedelta(days=60), is_platform_cost=True, created_by=admin.id),
-        Expenditure(facility_id=None, category='logistics', description='Central warehouse rent share', amount=Decimal('35000'), expenditure_date=today - timedelta(days=15), created_by=admin.id),
-        Expenditure(facility_id=fac1.id, category='commodity', description='Buffer stock purchase', amount=Decimal('18000'), expenditure_date=today - timedelta(days=20), created_by=admin.id),
-    ]
-    db.session.add_all(exps)
-
-    # Sample encounters for uptake & cost demos
-    import random
-    methods = ['Copper IUD', 'Levonorgestrel Implant', 'Injectable (DMPA)', 'Combined Oral Contraceptive', 'Male Condom']
-    reasons = ['Side-effect concerns', 'Partner opposition', 'Wants to conceive soon', 'Religious reasons', 'Prefers traditional method', 'Cost concern']
-    for i in range(45):
-        fac = random.choice([fac1, fac2])
-        outcome = random.choices(['accepted', 'refused', 'discontinued'], weights=[0.65, 0.25, 0.10])[0]
-        method = random.choice(methods)
-        prod = next((p for p in products if p.name == method), products[0])
-        qty = 1 if outcome == 'accepted' and prod.method_code != 'Condom' else (random.randint(3, 12) if outcome == 'accepted' else 0)
-        enc = ClientEncounter(
-            facility_id=fac.id,
-            encounter_date=today - timedelta(days=random.randint(1, 80)),
-            client_age_band=random.choice(['<20', '20-24', '25-29', '30-34', '35+']),
-            client_parity=random.choice(['0', '1-2', '3+']),
-            education_level=random.choice(['None', 'Primary', 'Secondary', 'Tertiary']),
-            method_offered=method,
-            method_accepted=method if outcome == 'accepted' else None,
-            outcome=outcome,
-            refusal_reason=random.choice(reasons) if outcome == 'refused' else None,
-            discontinuation_reason=random.choice(reasons) if outcome == 'discontinued' else None,
-            quantity_dispensed=qty,
-            product_id=prod.id if outcome == 'accepted' else None,
-            created_by=p1.id
-        )
-        db.session.add(enc)
-        if outcome == 'accepted' and qty > 0:
-            stock = StockItem.query.filter_by(facility_id=fac.id, product_id=prod.id).first()
-            if stock and stock.quantity_on_hand >= qty:
-                stock.quantity_on_hand -= qty
-                tx = StockTransaction(
-                    facility_id=fac.id, product_id=prod.id, transaction_type='issue',
-                    quantity=-qty, unit_cost=prod.unit_cost, reference='SEED-ENC', created_by=p1.id
-                )
-                db.session.add(tx)
-
+                quantity=qty, unit_cost=prod.unit_cost, reference='DEMO-SEED', created_by=admin.id,
+            ))
     db.session.commit()
-    print('Seed data created successfully.')
+    print('Demo activity seeded (SEED_DEMO_DATA=1).')
+
 
 
 # ---------------------------------------------------------------------------
