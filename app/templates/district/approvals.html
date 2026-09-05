@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Member Approvals{% endblock %}
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-8">
+  <h1 class="text-2xl font-bold mb-6">Member approvals · {{ church.name }}</h1>
+  <div class="bg-white rounded-2xl border p-6 mb-6">
+    <h2 class="font-semibold mb-3">Pending ({{ pending|length }})</h2>
+    {% for m in pending %}
+    <div class="border rounded-xl p-3 mb-3 text-sm">
+      <p class="font-medium">{{ m.full_name }} · {{ m.sex }} · {{ m.age_category }} · {{ m.confession }}</p>
+      <p class="text-slate-500">{{ m.email }} · {{ m.whatsapp or m.phone or '' }}</p>
+      <form method="post" action="/district/approvals/{{ m.id }}/approve" class="mt-2 flex flex-wrap gap-2 items-center">
+        <select name="status" class="text-xs border rounded px-2 py-1">
+          <option value="member">Member</option>
+          <option value="worker">Worker</option>
+          <option value="leader">Leader</option>
+          <option value="pastor">Pastor</option>
+        </select>
+        <input name="worker_type" placeholder="Worker type" class="text-xs border rounded px-2 py-1">
+        <input name="leader_type" placeholder="Leader type" class="text-xs border rounded px-2 py-1">
+        <input name="custom_title" placeholder="Custom title (editable)" class="text-xs border rounded px-2 py-1">
+        <label class="text-xs flex items-center gap-1"><input type="checkbox" name="can_enter_stats" value="yes"> Can enter weekly attendance</label>
+        <button class="text-xs px-3 py-1 rounded bg-teal-500 text-white">Approve</button>
+      </form>
+      <form method="post" action="/district/approvals/{{ m.id }}/reject" class="inline">
+        <button class="text-xs text-red-600 mt-1">Reject</button>
+      </form>
+    </div>
+    {% else %}<p class="text-slate-400 text-sm">None</p>{% endfor %}
+  </div>
+  {% if discontinue %}
+  <div class="bg-white rounded-2xl border p-6 mb-6">
+    <h2 class="font-semibold mb-3">Discontinue requests</h2>
+    {% for m in discontinue %}
+    <div class="flex justify-between text-sm p-2">
+      <span>{{ m.full_name }}</span>
+      <form method="post" action="/district/approvals/{{ m.id }}/discontinue"><button class="text-xs text-red-600">Confirm discontinue</button></form>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Home page programs{% endblock %}
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-8">
+  <a href="/admin/" class="text-sm text-blue-700 font-medium">← Admin</a>
+  <h1 class="text-2xl font-bold text-navy-900 mt-2 mb-1">Home page showcase</h1>
+  <p class="text-sm text-slate-500 mb-6">
+    Global churches <strong>request</strong> display. You approve and set how long it stays on the public home page
+    (<strong>24 hours or less</strong>). Multiple live programs rotate as a slideshow (20 seconds each).
+  </p>
+
+  <section class="mb-10">
+    <h2 class="font-semibold text-lg mb-3 text-amber-800">Pending requests ({{ pending|length }})</h2>
+    <div class="space-y-4">
+      {% for row in pending %}
+      <div class="bg-white rounded-2xl border border-amber-100 p-4 flex flex-wrap gap-4 items-start">
+        {% if row.photo %}
+        <img src="{% if row.photo.file_path.startswith('/') %}{{ row.photo.file_path }}{% else %}/{{ row.photo.file_path }}{% endif %}" class="w-28 h-20 object-cover rounded-lg border" alt="">
+        {% else %}
+        <div class="w-28 h-20 rounded-lg bg-slate-100 flex items-center justify-center text-xs text-slate-400">No photo</div>
+        {% endif %}
+        <div class="flex-1 min-w-[12rem]">
+          <p class="font-semibold">{{ row.p.title }}</p>
+          <p class="text-xs text-slate-500">{{ row.church.name }} · {{ row.p.program_date or "Date TBC" }} · {{ row.p.location or "Venue TBC" }}</p>
+        </div>
+        <form method="post" action="/admin/programs/{{ row.p.id }}/feature" class="flex flex-wrap gap-2 items-end">
+          <div>
+            <label class="text-xs text-slate-500 block">Display for (hours, max 24)</label>
+            <select name="display_hours" class="px-2 py-1.5 rounded-lg border text-sm">
+              <option value="1">1 hour</option>
+              <option value="3">3 hours</option>
+              <option value="6">6 hours</option>
+              <option value="12" selected>12 hours</option>
+              <option value="18">18 hours</option>
+              <option value="24">24 hours</option>
+            </select>
+          </div>
+          <button class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold">Approve for home</button>
+        </form>
+      </div>
+      {% else %}
+      <p class="text-sm text-slate-400">No pending home-page requests. Global admins use “Display on home page” on their program.</p>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="mb-10">
+    <h2 class="font-semibold text-lg mb-3 text-emerald-800">Live on home page now ({{ live|length }})</h2>
+    <div class="space-y-4">
+      {% for row in live %}
+      <div class="bg-white rounded-2xl border border-emerald-100 p-4 flex flex-wrap gap-4 items-start">
+        <div class="flex-1">
+          <p class="font-semibold">{{ row.p.title }}</p>
+          <p class="text-xs text-slate-500">{{ row.church.name }} · ends {{ row.p.home_display_ends_at }} · {{ row.p.home_display_hours }}h approved</p>
+        </div>
+        <form method="post" action="/admin/programs/{{ row.p.id }}/unfeature">
+          <button class="px-3 py-1.5 rounded-lg border text-xs font-semibold text-red-700">Stop early</button>
+        </form>
+      </div>
+      {% else %}
+      <p class="text-sm text-slate-400">None live right now.</p>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section>
+    <h2 class="font-semibold text-lg mb-3 text-slate-600">Other Global programs ({{ other|length }})</h2>
+    <ul class="text-sm space-y-2">
+      {% for row in other %}
+      <li class="bg-slate-50 rounded-xl border px-4 py-2 flex flex-wrap justify-between gap-2">
+        <span>{{ row.p.title }} · <span class="text-slate-500">{{ row.church.name }}</span></span>
+        <span class="text-xs text-slate-400">{% if row.p.request_home_display %}requested{% else %}children pages only{% endif %}</span>
+      </li>
+      {% else %}
+      <li class="text-slate-400">No other global programs.</li>
+      {% endfor %}
+    </ul>
+  </section>
+</div>
+{% endblock %}

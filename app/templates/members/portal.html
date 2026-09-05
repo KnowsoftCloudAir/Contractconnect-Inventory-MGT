@@ -1,0 +1,582 @@
+{% extends "base.html" %}
+{% block title %}My Space – Churchgate{% endblock %}
+{% block content %}
+<style>
+  .theme-royal { --mp-bg: #0b1f4a; --mp-card: rgba(255,255,255,0.1); --mp-text: #f8fafc; --mp-muted: #94a3b8; --mp-accent: #60a5fa; --mp-btn: #2563eb; --mp-border: rgba(255,255,255,0.15); }
+  .theme-pink { --mp-bg: #4a0d2e; --mp-card: rgba(255,255,255,0.12); --mp-text: #fff1f5; --mp-muted: #f9a8d4; --mp-accent: #f472b6; --mp-btn: #db2777; --mp-border: rgba(255,255,255,0.18); }
+  .theme-green { --mp-bg: #0a2e1f; --mp-card: rgba(255,255,255,0.1); --mp-text: #ecfdf5; --mp-muted: #6ee7b7; --mp-accent: #34d399; --mp-btn: #059669; --mp-border: rgba(255,255,255,0.15); }
+  .theme-white { --mp-bg: #f1f5f9; --mp-card: #ffffff; --mp-text: #0f172a; --mp-muted: #64748b; --mp-accent: #1d4ed8; --mp-btn: #1e40af; --mp-border: #e2e8f0; }
+  .member-space {
+    min-height: 100vh;
+    background: var(--mp-bg);
+    color: var(--mp-text);
+    position: relative;
+    overflow-x: hidden;
+  }
+  .member-space .ms-card {
+    background: var(--mp-card);
+    border: 1px solid var(--mp-border);
+    border-radius: 1.25rem;
+    backdrop-filter: blur(8px);
+  }
+  .member-space .ms-muted { color: var(--mp-muted); }
+  .member-space .ms-accent { color: var(--mp-accent); }
+  .member-space .ms-btn {
+    background: var(--mp-btn);
+    color: #fff;
+    border-radius: 0.75rem;
+    font-weight: 600;
+  }
+  .pray-watermark {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.08;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 500'%3E%3Cg fill='%23ffffff'%3E%3Cellipse cx='200' cy='120' rx='48' ry='55'/%3E%3Cpath d='M120 200 Q200 160 280 200 L300 420 Q200 460 100 420 Z'/%3E%3Cpath d='M140 250 Q100 320 90 400' stroke='%23ffffff' stroke-width='18' fill='none' stroke-linecap='round'/%3E%3Cpath d='M260 250 Q300 320 310 400' stroke='%23ffffff' stroke-width='18' fill='none' stroke-linecap='round'/%3E%3C/g%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: center 20%;
+    background-size: min(420px, 70vw);
+  }
+  .theme-white .pray-watermark { opacity: 0.06; filter: invert(1); }
+  .progress-bar { height: 0.65rem; border-radius: 999px; background: rgba(128,128,128,0.25); overflow: hidden; }
+
+  .flip-clock {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .flip-unit {
+    position: relative;
+    width: 2.15rem;
+    height: 2.5rem;
+    perspective: 200px;
+  }
+  .flip-card {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    border-radius: 0.45rem;
+    background: linear-gradient(180deg, #1e293b 0%, #0f172a 48%, #020617 52%, #0f172a 100%);
+    box-shadow: 0 4px 0 #020617, 0 6px 12px rgba(0,0,0,0.35);
+    color: #f8fafc;
+    font-weight: 800;
+    font-size: 1.15rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255,255,255,0.12);
+    overflow: hidden;
+  }
+  .flip-card::before {
+    content: "";
+    position: absolute;
+    left: 0; right: 0; top: 50%;
+    height: 1px;
+    background: rgba(0,0,0,0.55);
+  }
+  .flip-card.tick {
+    animation: flipTick 0.45s ease;
+  }
+  @keyframes flipTick {
+    0% { transform: rotateX(0deg); }
+    40% { transform: rotateX(-85deg); filter: brightness(0.7); }
+    100% { transform: rotateX(0deg); }
+  }
+  .flip-colon {
+    font-weight: 800;
+    font-size: 1.1rem;
+    opacity: 0.85;
+    animation: blinkColon 1s step-end infinite;
+  }
+  @keyframes blinkColon {
+    50% { opacity: 0.25; }
+  }
+  .theme-white .flip-card {
+    background: linear-gradient(180deg, #e2e8f0 0%, #cbd5e1 48%, #94a3b8 52%, #cbd5e1 100%);
+    color: #0f172a;
+    box-shadow: 0 3px 0 #64748b, 0 5px 10px rgba(0,0,0,0.12);
+  }
+  .flip-wrap {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.2rem;
+  }
+  .flip-label {
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    opacity: 0.75;
+  }
+
+  .progress-bar > span { display: block; height: 100%; background: var(--mp-accent); border-radius: 999px; transition: width 0.4s; }
+</style>
+
+<div class="member-space theme-royal" id="memberSpace" x-data="memberHub()" x-init="init()">
+  <div class="pray-watermark" aria-hidden="true"></div>
+
+  <div class="relative z-10 max-w-4xl mx-auto px-4 py-6 pb-16">
+    <header class="flex flex-wrap items-center justify-between gap-4 mb-6">
+      <div class="flex items-center gap-3">
+        <img src="/static/icons/icon-192.png" alt="Knowsoft Churchgate"
+             class="h-12 w-12 rounded-2xl shadow-lg object-contain bg-white/10 p-1"
+             onerror="this.src='/static/img/knowsoft-logo.png'">
+        <div>
+          <p class="text-xs ms-muted uppercase tracking-wider font-semibold">Knowsoft Churchgate</p>
+          <h1 class="text-xl sm:text-2xl font-bold leading-tight">My Spiritual Space</h1>
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="text-xs ms-muted mr-1">Theme</span>
+        <button type="button" @click="setTheme('royal')" class="w-8 h-8 rounded-full border-2 border-white/40 bg-[#0b1f4a]" title="Royal blue"></button>
+        <button type="button" @click="setTheme('pink')" class="w-8 h-8 rounded-full border-2 border-white/40 bg-[#db2777]" title="Pink"></button>
+        <button type="button" @click="setTheme('green')" class="w-8 h-8 rounded-full border-2 border-white/40 bg-[#059669]" title="Green"></button>
+        <button type="button" @click="setTheme('white')" class="w-8 h-8 rounded-full border-2 border-slate-300 bg-white" title="White"></button>
+      </div>
+    </header>
+
+    <div class="flex justify-center mb-5">
+      <div class="ms-card px-4 py-3 shadow-lg inline-flex flex-col items-center gap-1">
+        <p class="flip-label ms-muted">Now with you · local time</p>
+        <div class="flip-clock" aria-live="polite">
+          <div class="flip-unit"><div class="flip-card" :class="clock.pulseH && 'tick'" x-text="clock.h1"></div></div>
+          <div class="flip-unit"><div class="flip-card" :class="clock.pulseH && 'tick'" x-text="clock.h2"></div></div>
+          <span class="flip-colon ms-accent">:</span>
+          <div class="flip-unit"><div class="flip-card" :class="clock.pulseM && 'tick'" x-text="clock.m1"></div></div>
+          <div class="flip-unit"><div class="flip-card" :class="clock.pulseM && 'tick'" x-text="clock.m2"></div></div>
+          <span class="flip-colon ms-accent">:</span>
+          <div class="flip-unit"><div class="flip-card tick" x-text="clock.s1"></div></div>
+          <div class="flip-unit"><div class="flip-card tick" x-text="clock.s2"></div></div>
+          <span class="text-xs font-bold ms-muted ml-1" x-text="clock.ampm"></span>
+        </div>
+        <p class="text-[10px] ms-muted" x-text="clock.dateLine"></p>
+      </div>
+    </div>
+
+    {% if sample_warning %}
+    <div class="mb-5 rounded-2xl border-2 border-amber-400/80 bg-amber-500/20 p-4 text-sm shadow-lg">
+      <p class="font-semibold">{{ sample_warning }}</p>
+      <a href="/join" class="inline-block mt-2 text-xs font-bold underline">Register as a full member →</a>
+      <a href="/member/subscription" class="inline-block mt-2 ml-3 text-xs font-bold underline">Subscription →</a>
+    </div>
+    {% endif %}
+
+    {% if not member %}
+    <div class="ms-card p-6 text-center">
+      <p class="ms-muted">No member profile linked to this account.</p>
+      <a href="/join" class="ms-btn inline-block mt-4 px-5 py-2.5 text-sm">Join a church</a>
+    </div>
+    {% else %}
+
+    <div class="ms-card p-4 mb-5 flex flex-wrap gap-3 items-center">
+      {% if member.profile_pic %}
+      <img src="{{ member.profile_pic }}" class="w-14 h-14 rounded-full object-cover ring-2 ring-white/30" alt="">
+      {% else %}
+      <div class="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center text-xl font-bold">{{ member.full_name[:1] if member.full_name else "M" }}</div>
+      {% endif %}
+      <div class="flex-1 min-w-[10rem]">
+        <p class="font-semibold text-lg">{{ member.full_name }}</p>
+        <p class="text-xs ms-muted capitalize">{{ member.status }}{% if member.custom_title %} · {{ member.custom_title }}{% endif %} · {{ member.approval_status }}</p>
+      </div>
+      <a href="/auth/change-password" class="text-xs font-semibold ms-accent underline">Password</a>
+    </div>
+
+    {% if member.approval_status == 'approved' %}
+
+    <nav class="flex flex-wrap gap-2 mb-6 text-xs font-semibold">
+      <a href="#devotions" class="px-3 py-1.5 rounded-full ms-card">Devotions</a>
+      <a href="#bible" class="px-3 py-1.5 rounded-full ms-card">Bible</a>
+      <a href="#evangelism" class="px-3 py-1.5 rounded-full ms-card">Evangelism</a>
+      <a href="#prayer" class="px-3 py-1.5 rounded-full ms-card">Prayer</a>
+      <a href="#testimonies" class="px-3 py-1.5 rounded-full ms-card">Testimonies</a>
+      <a href="#music" class="px-3 py-1.5 rounded-full ms-card">Music</a>
+      <a href="#church" class="px-3 py-1.5 rounded-full ms-card">My church</a>
+      <a href="/programs/" class="px-3 py-1.5 rounded-full ms-card">Programs</a>
+    </nav>
+
+    <section id="devotions" class="ms-card p-5 mb-5">
+      <h2 class="font-bold text-lg mb-1">Devotionals</h2>
+      <p class="text-xs ms-muted mb-4">Set quiet time, morning and evening devotion with optional alarms.</p>
+      <div class="grid sm:grid-cols-3 gap-4">
+        <div class="rounded-xl border border-white/10 p-3 bg-black/10">
+          <p class="text-sm font-semibold mb-2">Quiet time</p>
+          <input type="time" x-model="devotion.quiet" @change="saveDevotion()" class="w-full rounded-lg px-2 py-2 text-sm text-slate-900">
+          <label class="flex items-center gap-2 mt-2 text-xs"><input type="checkbox" x-model="devotion.quietOn" @change="saveDevotion()"> Alarm on</label>
+        </div>
+        <div class="rounded-xl border border-white/10 p-3 bg-black/10">
+          <p class="text-sm font-semibold mb-2">Morning devotion</p>
+          <input type="time" x-model="devotion.morning" @change="saveDevotion()" class="w-full rounded-lg px-2 py-2 text-sm text-slate-900">
+          <label class="flex items-center gap-2 mt-2 text-xs"><input type="checkbox" x-model="devotion.morningOn" @change="saveDevotion()"> Alarm on</label>
+        </div>
+        <div class="rounded-xl border border-white/10 p-3 bg-black/10">
+          <p class="text-sm font-semibold mb-2">Evening devotion</p>
+          <input type="time" x-model="devotion.evening" @change="saveDevotion()" class="w-full rounded-lg px-2 py-2 text-sm text-slate-900">
+          <label class="flex items-center gap-2 mt-2 text-xs"><input type="checkbox" x-model="devotion.eveningOn" @change="saveDevotion()"> Alarm on</label>
+        </div>
+      </div>
+      <p class="text-xs ms-muted mt-3" x-text="alarmStatus"></p>
+      <button type="button" @click="enableNotifications()" class="mt-2 text-xs font-semibold ms-btn px-3 py-1.5">Enable device alarms</button>
+    </section>
+
+    <section id="bible" class="ms-card p-5 mb-5">
+      <h2 class="font-bold text-lg mb-1">Holy Bible</h2>
+      <p class="text-xs ms-muted mb-3">Select a book or a situation. Verses slide one by one. Quoted words of Jesus show in <span class="text-red-400 font-semibold">red</span>.</p>
+      <div class="grid sm:grid-cols-2 gap-3 mb-3">
+        <div>
+          <label class="text-xs ms-muted">Bible book</label>
+          <select x-model="bible.book" @change="bible.situation=''" class="w-full mt-1 rounded-xl px-3 py-2 text-sm text-slate-900">
+            <option value="">— Select a book —</option>
+            <template x-for="b in bibleBooks" :key="b"><option :value="b" x-text="b"></option></template>
+          </select>
+        </div>
+        <div>
+          <label class="text-xs ms-muted">Chapter</label>
+          <input type="number" min="1" x-model="bible.chapter" placeholder="e.g. 3" class="w-full mt-1 rounded-xl px-3 py-2 text-sm text-slate-900">
+        </div>
+      </div>
+      <div class="mb-3">
+        <label class="text-xs ms-muted">Or choose a situation</label>
+        <select x-model="bible.situation" @change="loadSituation()" class="w-full mt-1 rounded-xl px-3 py-2 text-sm text-slate-900">
+          <option value="">— What are you facing? —</option>
+          <template x-for="s in situations" :key="s.id"><option :value="s.id" x-text="s.label"></option></template>
+        </select>
+      </div>
+      <div class="flex flex-wrap gap-2 mb-3 items-center">
+        <select x-model="bible.version" class="rounded-xl px-3 py-2 text-sm text-slate-900">
+          <option value="kjv">KJV</option>
+          <option value="web">World English</option>
+          <option value="bbe">Basic English</option>
+        </select>
+        <button type="button" @click="loadFromBook()" class="ms-btn px-4 py-2 text-sm">Load chapter</button>
+        <label class="flex items-center gap-2 text-xs"><input type="checkbox" x-model="bible.voiceOn"> Auto-speak slides</label>
+        <select x-model="bible.voiceName" class="rounded-xl px-2 py-2 text-xs text-slate-900 max-w-[12rem]">
+          <option value="">Default voice</option>
+          <template x-for="v in voiceList" :key="v.name">
+            <option :value="v.name" x-text="v.name"></option>
+          </template>
+        </select>
+        <button type="button" @click="refreshVoices()" class="text-xs underline ms-muted">Load voices</button>
+      </div>
+      <div class="rounded-2xl bg-black/25 border border-white/10 p-5 min-h-[10rem]">
+        <template x-if="bible.slides.length">
+          <div>
+            <p class="text-xs ms-accent font-semibold mb-2" x-text="bible.slides[bible.slideIndex].ref"></p>
+            <p class="text-base sm:text-lg leading-relaxed" x-html="formatVerseHtml(bible.slides[bible.slideIndex].text)"></p>
+            <p class="text-xs ms-muted mt-4" x-text="(bible.slideIndex+1)+' / '+bible.slides.length"></p>
+          </div>
+        </template>
+        <template x-if="!bible.slides.length">
+          <p class="text-sm ms-muted" x-text="bible.status || 'Select a book or situation…'"></p>
+        </template>
+      </div>
+      <div class="flex flex-wrap gap-2 mt-3">
+        <button type="button" @click="prevSlide()" class="px-4 py-2 rounded-xl border border-white/20 text-sm font-semibold">← Prev</button>
+        <button type="button" @click="nextSlide()" class="ms-btn px-4 py-2 text-sm">Next →</button>
+        <button type="button" @click="speakCurrent(false)" class="px-4 py-2 rounded-xl border border-white/20 text-sm font-semibold">Speak this verse</button>
+        <button type="button" @click="startContinuous()" class="ms-btn px-4 py-2 text-sm">Continuous chapter</button>
+        <button type="button" @click="bible.continuous=false; stopSpeak()" class="text-xs ms-muted underline px-2">Stop voice</button>
+      </div>
+    </section>
+
+    <section id="evangelism" class="ms-card p-5 mb-5">
+      <h2 class="font-bold text-lg mb-1">Evangelism bar</h2>
+      <div class="grid grid-cols-3 gap-3 mb-3 text-center">
+        <div><p class="text-2xl font-bold ms-accent" x-text="evangelism.target"></p><p class="text-xs ms-muted">Target</p></div>
+        <div><p class="text-2xl font-bold text-emerald-400" x-text="evangelism.achieved"></p><p class="text-xs ms-muted">Achieved</p></div>
+        <div><p class="text-2xl font-bold text-amber-300" x-text="Math.max(0, evangelism.target - evangelism.achieved)"></p><p class="text-xs ms-muted">In progress</p></div>
+      </div>
+      <div class="progress-bar mb-4"><span :style="'width:' + evangelismPct() + '%'"></span></div>
+      <div class="flex flex-wrap gap-2 text-sm">
+        <input type="number" min="0" x-model.number="evangelism.target" @change="saveEvangelism()" class="w-24 rounded-lg px-2 py-1.5 text-slate-900">
+        <button type="button" @click="evangelism.achieved++; saveEvangelism()" class="ms-btn px-3 py-1.5 text-xs">+1 soul won</button>
+        <button type="button" @click="if(evangelism.achieved>0){evangelism.achieved--; saveEvangelism()}" class="px-3 py-1.5 text-xs rounded-lg border border-white/20">−1</button>
+      </div>
+    </section>
+
+    <section id="prayer" class="ms-card p-5 mb-5">
+      <h2 class="font-bold text-lg mb-1">Prayer request board</h2>
+      <textarea x-model="prayer.new" rows="2" placeholder="What should we agree with you in prayer?" class="w-full rounded-xl px-3 py-2 text-sm text-slate-900 mb-2"></textarea>
+      <button type="button" @click="addPrayer()" class="ms-btn px-4 py-2 text-sm mb-4">Post request</button>
+      <ul class="space-y-2 max-h-48 overflow-y-auto">
+        <template x-for="(p, i) in prayer.list" :key="i">
+          <li class="text-sm rounded-lg bg-black/15 px-3 py-2 flex justify-between gap-2">
+            <span x-text="p"></span>
+            <button type="button" @click="prayer.list.splice(i,1); savePrayer()" class="text-xs ms-muted">Remove</button>
+          </li>
+        </template>
+      </ul>
+    </section>
+
+    <div class="grid sm:grid-cols-2 gap-4 mb-5">
+      <section id="testimonies" class="ms-card p-5">
+        <h2 class="font-bold text-lg mb-2">Testimonies</h2>
+        <a href="/testimonies" class="ms-btn inline-block px-4 py-2 text-sm">Open testimony wall →</a>
+      </section>
+      <section id="music" class="ms-card p-5">
+        <h2 class="font-bold text-lg mb-2">Inspirational music</h2>
+        <p class="text-xs ms-muted mb-3">YouTube only — long worship playlist · select then Play</p>
+        <select x-model="music.id" class="w-full rounded-xl px-3 py-2 text-sm text-slate-900 mb-3">
+          <template x-for="m in musicList" :key="m.id">
+            <option :value="m.id" x-text="m.title"></option>
+          </template>
+        </select>
+        <div class="rounded-xl overflow-hidden bg-black aspect-video mb-2" x-show="music.playing">
+          <iframe class="w-full h-full" :src="'https://www.youtube.com/embed/' + music.id + '?rel=0'"
+            title="Worship" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowfullscreen loading="lazy"></iframe>
+        </div>
+        <button type="button" @click="music.playing=true" class="ms-btn px-3 py-1.5 text-xs">Play</button>
+        <button type="button" @click="music.playing=false" class="text-xs ms-muted underline ml-2">Hide</button>
+      </section>
+    </div>
+
+    <section id="church" class="ms-card p-5 mb-5">
+      <h2 class="font-bold text-lg mb-3">My church</h2>
+      {% if church %}
+      <p class="font-medium">{{ church.name }}</p>
+      <p class="text-sm ms-muted mt-2">Address: {{ church.address or "—" }}</p>
+      <p class="text-sm ms-muted mt-1">Pastor: {{ church.resident_pastor or "—" }} · {{ church.pastor_phone or church.phone or "—" }}</p>
+      <p class="text-sm ms-muted mt-3">{{ weekly_note or "Weekly activities will appear when published." }}</p>
+      <div class="grid sm:grid-cols-2 gap-3 mt-4 text-sm">
+        <div class="rounded-xl bg-black/15 p-3">
+          <p class="text-xs font-semibold ms-accent uppercase mb-1">Tithe</p>
+          <p>{{ church.tithe_account_name or "—" }}</p>
+          <p class="ms-muted">{{ church.tithe_account_number or "" }} · {{ church.tithe_bank_name or "" }}</p>
+        </div>
+        <div class="rounded-xl bg-black/15 p-3">
+          <p class="text-xs font-semibold ms-accent uppercase mb-1">Offering</p>
+          <p>{{ church.offering_account_name or "—" }}</p>
+          <p class="ms-muted">{{ church.offering_account_number or "" }} · {{ church.offering_bank_name or "" }}</p>
+        </div>
+      </div>
+      {% else %}
+      <p class="ms-muted text-sm">Church details not linked yet.</p>
+      {% endif %}
+      {% if district_member_count is not none %}
+      <p class="mt-4 text-sm">District members: <strong class="ms-accent text-xl">{{ district_member_count }}</strong></p>
+      {% endif %}
+    </section>
+
+    <section class="ms-card p-5 mb-5">
+      <div class="flex justify-between items-center mb-3">
+        <h2 class="font-bold text-lg">Programs & events</h2>
+        <a href="/programs/" class="text-sm ms-accent font-semibold">View all →</a>
+      </div>
+      {% if programs %}
+      <ul class="space-y-2">
+        {% for p in programs[:5] %}
+        <li><a href="/programs/{{ p.id }}" class="block rounded-xl bg-black/15 px-3 py-2 text-sm hover:bg-black/25">{{ p.title }} <span class="ms-muted text-xs">· {{ p.program_date or "" }}</span></a></li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="text-sm ms-muted">No programs listed yet.</p>
+      {% endif %}
+    </section>
+
+    {% else %}
+    <div class="ms-card p-6 text-center"><p>Membership status: <strong>{{ member.approval_status }}</strong>. Full tools unlock after approval.</p></div>
+    {% endif %}
+    {% endif %}
+  </div>
+</div>
+
+<script>
+function memberHub() {
+  const KEY = 'cg_member_hub_v2';
+  return {
+    theme: 'royal',
+    clock: { h1:'0',h2:'0',m1:'0',m2:'0',s1:'0',s2:'0',ampm:'',dateLine:'',pulseH:false,pulseM:false,_prevH:'',_prevM:'' },
+    devotion: { quiet:'05:30', morning:'06:00', evening:'20:00', quietOn:false, morningOn:false, eveningOn:false },
+    evangelism: { target: 10, achieved: 0 },
+    prayer: { new: '', list: [] },
+    alarmStatus: 'Alarms work best with notifications enabled.',
+    _timers: [],
+    bible: { book:'', chapter:'', situation:'', version:'kjv', slides:[], slideIndex:0, status:'', voiceOn:false, voiceName:'', continuous:false },
+    voiceList: [],
+    music: { id: 'DXDGE_lRI0E', playing: false },
+        musicList: [],
+    bibleBooks: ['Genesis','Exodus','Leviticus','Numbers','Deuteronomy','Joshua','Judges','Ruth','1 Samuel','2 Samuel','1 Kings','2 Kings','1 Chronicles','2 Chronicles','Ezra','Nehemiah','Esther','Job','Psalms','Proverbs','Ecclesiastes','Song of Solomon','Isaiah','Jeremiah','Lamentations','Ezekiel','Daniel','Hosea','Joel','Amos','Obadiah','Jonah','Micah','Nahum','Habakkuk','Zephaniah','Haggai','Zechariah','Malachi','Matthew','Mark','Luke','John','Acts','Romans','1 Corinthians','2 Corinthians','Galatians','Ephesians','Philippians','Colossians','1 Thessalonians','2 Thessalonians','1 Timothy','2 Timothy','Titus','Philemon','Hebrews','James','1 Peter','2 Peter','1 John','2 John','3 John','Jude','Revelation'],
+    situations: [
+      { id:'unwell', label:'Feeling unwell / sickness', refs:['Psalm 103:2-3','Isaiah 53:5','Jeremiah 17:14','James 5:14-15','3 John 1:2','Matthew 9:35','Mark 5:34','1 Peter 2:24'] },
+      { id:'anxious', label:'Anxiety / worry', refs:['Philippians 4:6-7','1 Peter 5:7','Matthew 6:25-34','John 14:27','Isaiah 41:10','Psalm 94:19'] },
+      { id:'fear', label:'Fear', refs:['Isaiah 41:10','Psalm 23:4','2 Timothy 1:7','Joshua 1:9','Psalm 27:1','John 14:1'] },
+      { id:'lonely', label:'Loneliness', refs:['Deuteronomy 31:6','Psalm 27:10','Isaiah 43:2','Matthew 28:20','Hebrews 13:5'] },
+      { id:'grief', label:'Grief / loss', refs:['Psalm 34:18','Matthew 5:4','Revelation 21:4','2 Corinthians 1:3-4','John 11:25-26'] },
+      { id:'finance', label:'Financial need', refs:['Philippians 4:19','Matthew 6:33','Psalm 37:25','Malachi 3:10','2 Corinthians 9:8'] },
+      { id:'guidance', label:'Need guidance', refs:['Proverbs 3:5-6','Psalm 32:8','Isaiah 30:21','James 1:5','Psalm 119:105'] },
+      { id:'strength', label:'Need strength', refs:['Isaiah 40:31','Philippians 4:13','Ephesians 6:10','2 Corinthians 12:9','Psalm 46:1'] },
+      { id:'forgiveness', label:'Need forgiveness', refs:['1 John 1:9','Psalm 103:12','Isaiah 1:18','Ephesians 1:7','Luke 15:20-24'] },
+      { id:'faith', label:'Strengthen faith', refs:['Hebrews 11:1','Romans 10:17','Mark 9:23','2 Corinthians 5:7','Hebrews 12:2'] },
+      { id:'peace', label:'Need peace', refs:['John 14:27','Isaiah 26:3','Philippians 4:7','Colossians 3:15','Romans 5:1'] },
+      { id:'gratitude', label:'Thankfulness', refs:['1 Thessalonians 5:18','Psalm 100:4','Psalm 103:1-5','Colossians 3:17'] },
+      { id:'salvation', label:'Salvation / new life', refs:['John 3:16','Romans 10:9-10','Ephesians 2:8-9','Acts 16:31','John 14:6'] },
+      { id:'family', label:'Family / marriage', refs:['Ephesians 5:25','Ephesians 6:1-4','Joshua 24:15','Proverbs 22:6','1 Corinthians 13:4-7'] },
+      { id:'temptation', label:'Temptation', refs:['1 Corinthians 10:13','James 4:7','Matthew 26:41','Hebrews 2:18','Psalm 119:11'] },
+    ],
+    init() {
+      try {
+        const s = JSON.parse(localStorage.getItem(KEY) || '{}');
+        if (s.theme) this.setTheme(s.theme);
+        if (s.devotion) Object.assign(this.devotion, s.devotion);
+        if (s.evangelism) Object.assign(this.evangelism, s.evangelism);
+        if (s.prayer) this.prayer.list = s.prayer;
+      } catch (e) {}
+      this.scheduleAlarms();
+      this.loadMusicLinks();
+      this.refreshVoices();
+      if ('speechSynthesis' in window) speechSynthesis.onvoiceschanged = () => this.refreshVoices();
+      this.tickClock();
+      setInterval(() => this.tickClock(), 1000);
+    },
+    persist() {
+      localStorage.setItem(KEY, JSON.stringify({
+        theme: this.theme, devotion: this.devotion, evangelism: this.evangelism, prayer: this.prayer.list
+      }));
+    },
+    setTheme(name) {
+      this.theme = name;
+      const el = document.getElementById('memberSpace');
+      el.classList.remove('theme-royal','theme-pink','theme-green','theme-white');
+      el.classList.add('theme-' + name);
+      this.persist();
+    },
+    tickClock() {
+      const d = new Date();
+      let h = d.getHours();
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      h = h % 12; if (h === 0) h = 12;
+      const hh = String(h).padStart(2,'0');
+      const mm = String(d.getMinutes()).padStart(2,'0');
+      const ss = String(d.getSeconds()).padStart(2,'0');
+      this.clock.pulseH = this.clock._prevH && this.clock._prevH !== hh;
+      this.clock.pulseM = this.clock._prevM && this.clock._prevM !== mm;
+      this.clock._prevH = hh; this.clock._prevM = mm;
+      this.clock.h1=hh[0]; this.clock.h2=hh[1];
+      this.clock.m1=mm[0]; this.clock.m2=mm[1];
+      this.clock.s1=ss[0]; this.clock.s2=ss[1];
+      this.clock.ampm = ampm;
+      this.clock.dateLine = d.toLocaleDateString(undefined,{weekday:'long',month:'short',day:'numeric'});
+    },
+    saveDevotion() { this.persist(); this.scheduleAlarms(); },
+    saveEvangelism() { this.persist(); },
+    savePrayer() { this.persist(); },
+    evangelismPct() {
+      if (!this.evangelism.target) return 0;
+      return Math.min(100, Math.round(100 * this.evangelism.achieved / this.evangelism.target));
+    },
+    addPrayer() {
+      const t = (this.prayer.new || '').trim();
+      if (!t) return;
+      this.prayer.list.unshift(t);
+      this.prayer.new = '';
+      this.savePrayer();
+    },
+    enableNotifications() {
+      if (!('Notification' in window)) { this.alarmStatus = 'Notifications not supported.'; return; }
+      Notification.requestPermission().then(p => {
+        this.alarmStatus = p === 'granted' ? 'Notifications enabled.' : 'Permission denied — page alarms only.';
+      });
+    },
+    scheduleAlarms() {
+      this._timers.forEach(clearTimeout);
+      this._timers = [];
+      const slots = [
+        { time: this.devotion.quiet, on: this.devotion.quietOn, label: 'Quiet time with the Lord' },
+        { time: this.devotion.morning, on: this.devotion.morningOn, label: 'Morning devotion' },
+        { time: this.devotion.evening, on: this.devotion.eveningOn, label: 'Evening devotion' },
+      ];
+      const now = new Date();
+      slots.forEach(s => {
+        if (!s.on || !s.time) return;
+        const [h, m] = s.time.split(':').map(Number);
+        const next = new Date(now);
+        next.setHours(h, m, 0, 0);
+        if (next <= now) next.setDate(next.getDate() + 1);
+        this._timers.push(setTimeout(() => {
+          if (Notification.permission === 'granted') new Notification('Churchgate devotion', { body: s.label, icon: '/static/icons/icon-192.png' });
+          else alert(s.label);
+          this.scheduleAlarms();
+        }, next - now));
+      });
+    },
+    async fetchRef(ref) {
+      const r = await fetch('https://bible-api.com/' + encodeURIComponent(ref) + '?translation=' + (this.bible.version||'kjv'));
+      if (!r.ok) throw new Error('fail');
+      return await r.json();
+    },
+    async loadFromBook() {
+      if (!this.bible.book) { this.bible.status = 'Please select a book.'; return; }
+      this.bible.status = 'Loading…'; this.bible.slides = []; this.bible.slideIndex = 0;
+      try {
+        const ref = this.bible.book + ' ' + (this.bible.chapter || '1');
+        const j = await this.fetchRef(ref);
+        const verses = j.verses || [];
+        this.bible.slides = verses.length
+          ? verses.map(v => ({ ref: (j.reference||this.bible.book) + ':' + v.verse, text: (v.text||'').trim() }))
+          : [{ ref: j.reference || ref, text: (j.text||'').trim() }];
+        this.bible.status = '';
+        if (this.bible.voiceOn) this.speakCurrent();
+      } catch (e) {
+        this.bible.status = 'Could not load chapter. Try another number.';
+      }
+    },
+    async loadSituation() {
+      const s = this.situations.find(x => x.id === this.bible.situation);
+      if (!s) return;
+      this.bible.book = '';
+      this.bible.status = 'Loading: ' + s.label + '…';
+      this.bible.slides = []; this.bible.slideIndex = 0;
+      const slides = [];
+      for (const ref of s.refs) {
+        try {
+          const j = await this.fetchRef(ref);
+          slides.push({ ref: j.reference || ref, text: (j.text || (j.verses||[]).map(v=>v.text).join(' ') || '').trim() });
+        } catch (e) {}
+      }
+      this.bible.slides = slides;
+      this.bible.status = slides.length ? '' : 'Could not load verses.';
+      if (slides.length && this.bible.voiceOn) this.speakCurrent();
+    },
+    formatVerseHtml(text) {
+      if (!text) return '';
+      let html = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      html = html.replace(/([“"][^”"]+[”"])/g, '<span style="color:#f87171;font-weight:600">$1</span>');
+      return html;
+    },
+    prevSlide() {
+      if (this.bible.slideIndex > 0) { this.bible.slideIndex--; if (this.bible.voiceOn) this.speakCurrent(); }
+    },
+    nextSlide() {
+      if (this.bible.slideIndex < this.bible.slides.length - 1) { this.bible.slideIndex++; if (this.bible.voiceOn) this.speakCurrent(); }
+    },
+    speakCurrent(chain) {
+      if (!this.bible.slides.length || !('speechSynthesis' in window)) return;
+      if (!chain) this.bible.continuous = false;
+      this.stopSpeak();
+      const s = this.bible.slides[this.bible.slideIndex];
+      const u = new SpeechSynthesisUtterance((s.ref + '. ' + s.text).replace(/[“”"]/g, ''));
+      u.rate = 0.9;
+      const voices = speechSynthesis.getVoices();
+      let voice = null;
+      if (this.bible.voiceName) voice = voices.find(v => v.name === this.bible.voiceName);
+      if (!voice) voice = voices.find(v => /en/i.test(v.lang) && /female|samantha|zira|google uk/i.test(v.name)) || voices.find(v => /en/i.test(v.lang));
+      if (voice) u.voice = voice;
+      u.onend = () => {
+        if (this.bible.continuous && this.bible.slideIndex < this.bible.slides.length - 1) {
+          this.bible.slideIndex++;
+          this.speakCurrent(true);
+        } else {
+          this.bible.continuous = false;
+        }
+      };
+      speechSynthesis.speak(u);
+    },
+    stopSpeak() {
+      this.bible.continuous = false;
+      if ('speechSynthesis' in window) speechSynthesis.cancel();
+    },
+  };
+}
+</script>
+{% endblock %}

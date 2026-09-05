@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Add Member{% endblock %}
+{% block content %}
+<div class="max-w-lg mx-auto px-4 py-8">
+  <h1 class="text-xl font-bold mb-6">Register Member · {{ church.name }}</h1>
+  <form method="post" action="/district/members/add" class="bg-white rounded-2xl border p-6 space-y-4">
+    <input name="full_name" required placeholder="Full name *" class="w-full px-4 py-3 rounded-xl border">
+    <select name="gender" class="w-full px-4 py-3 rounded-xl border">
+      <option value="">Gender</option><option value="male">Male</option><option value="female">Female</option>
+    </select>
+    <input name="phone" placeholder="Phone" class="w-full px-4 py-3 rounded-xl border">
+    <input name="email" type="email" placeholder="Email" class="w-full px-4 py-3 rounded-xl border">
+    <input name="address" placeholder="Address" class="w-full px-4 py-3 rounded-xl border">
+    <select name="status" class="w-full px-4 py-3 rounded-xl border">
+      <option value="member">Member</option>
+      <option value="worker">Worker</option>
+      <option value="leader">Leader</option>
+    </select>
+    <select name="worker_type" class="w-full px-4 py-3 rounded-xl border">
+      <option value="">Worker type (if worker)</option>
+      <option value="usher">Usher</option><option value="choir">Choir</option>
+      <option value="prayer">Prayer</option><option value="drama">Drama</option>
+      <option value="evangelist">Evangelist</option><option value="media">Media</option>
+      <option value="protocol">Protocol</option><option value="other">Other</option>
+    </select>
+    <select name="leader_type" class="w-full px-4 py-3 rounded-xl border">
+      <option value="">Leader type (if leader)</option>
+      <option value="global_pastor">Global Pastor</option>
+      <option value="country_pastor">Country Pastor</option>
+      <option value="state_pastor">State Pastor</option>
+      <option value="group_pastor">Group Pastor</option>
+      <option value="coordinator">Coordinator</option>
+      <option value="student_leader">Student Leader</option>
+      <option value="campus_leader">Campus Leader</option>
+      <option value="children_leader">Children Leader</option>
+      <option value="women_leader">Women Leader</option>
+      <option value="bible_study_teacher">Bible Study Teacher</option>
+      <option value="representative">Representative</option>
+    </select>
+    <button class="w-full py-3 rounded-xl bg-teal-500 text-white font-semibold">Save Member</button>
+  </form>
+</div>
+{% endblock %}

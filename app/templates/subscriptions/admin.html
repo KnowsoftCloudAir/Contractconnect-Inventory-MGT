@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Member subscriptions – Admin{% endblock %}
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-8">
+  <a href="/admin/" class="text-sm text-blue-700 font-medium">← Admin</a>
+  <h1 class="text-2xl font-bold mt-2 mb-1">Member subscriptions</h1>
+  <p class="text-sm text-slate-500 mb-6">Set prices & bank details. Confirm payments to activate membership for the chosen duration. Expired subscriptions auto-deactivate members.</p>
+
+  <form method="post" action="/admin/subscriptions/settings" class="bg-white border rounded-2xl p-5 mb-8 space-y-3 shadow-sm">
+    <h2 class="font-semibold">Prices & payment details</h2>
+    <input name="title" value="{{ settings.title }}" class="w-full px-3 py-2 rounded-xl border" placeholder="Title">
+    <div class="grid sm:grid-cols-3 gap-3">
+      <input name="currency" value="{{ settings.currency }}" placeholder="Currency" class="px-3 py-2 rounded-xl border">
+      <input name="monthly_price" type="number" step="0.01" value="{{ settings.monthly_price }}" placeholder="Monthly price" class="px-3 py-2 rounded-xl border">
+      <input name="annual_price" type="number" step="0.01" value="{{ settings.annual_price }}" placeholder="Annual price" class="px-3 py-2 rounded-xl border">
+    </div>
+    <input name="custom_min_days" type="number" value="{{ settings.custom_min_days }}" placeholder="Min custom days" class="w-full px-3 py-2 rounded-xl border">
+    <textarea name="instructions" rows="2" class="w-full px-3 py-2 rounded-xl border" placeholder="Instructions">{{ settings.instructions or "" }}</textarea>
+    <div class="grid sm:grid-cols-3 gap-3">
+      <input name="bank_name" value="{{ settings.bank_name or "" }}" placeholder="Bank" class="px-3 py-2 rounded-xl border">
+      <input name="account_name" value="{{ settings.account_name or "" }}" placeholder="Account name" class="px-3 py-2 rounded-xl border">
+      <input name="account_number" value="{{ settings.account_number or "" }}" placeholder="Account number" class="px-3 py-2 rounded-xl border">
+    </div>
+    <textarea name="other_details" rows="2" class="w-full px-3 py-2 rounded-xl border" placeholder="Other details">{{ settings.other_details or "" }}</textarea>
+    <button class="px-5 py-2.5 rounded-xl bg-navy-900 text-white text-sm font-semibold">Save settings</button>
+  </form>
+
+  <h2 class="font-semibold text-lg mb-3">Requests</h2>
+  <div class="space-y-3">
+    {% for row in rows %}
+    <div class="bg-white border rounded-2xl p-4 flex flex-wrap justify-between gap-3 items-start">
+      <div>
+        <p class="font-semibold">{{ row.user.email if row.user else "User" }} · {{ row.s.plan }} · {{ row.s.currency }} {{ "%.2f"|format(row.s.amount) }}</p>
+        <p class="text-xs text-slate-500">{{ row.s.duration_days }} days · {{ row.s.status }} · Ref {{ row.s.payment_reference }} · {{ row.s.created_at }}</p>
+        {% if row.s.ends_at %}<p class="text-xs text-slate-500">Ends {{ row.s.ends_at }}</p>{% endif %}
+      </div>
+      {% if row.s.status == 'pending' %}
+      <div class="flex gap-2">
+        <form method="post" action="/admin/subscriptions/{{ row.s.id }}/confirm">
+          <button class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold">Confirm paid</button>
+        </form>
+        <form method="post" action="/admin/subscriptions/{{ row.s.id }}/reject">
+          <button class="px-3 py-1.5 rounded-lg border text-xs text-red-700">Reject</button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+    {% else %}
+    <p class="text-sm text-slate-400">No subscription records yet.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

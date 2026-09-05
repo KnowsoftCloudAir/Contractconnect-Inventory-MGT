@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block title %}{{ program.title }} – Programs{% endblock %}
+{% block content %}
+<div class="max-w-3xl mx-auto px-4 py-8">
+  <div class="flex flex-wrap justify-between gap-2 items-center mb-1">
+    <a href="/programs/" class="text-sm text-blue-700 font-medium">← All programs</a>
+    {% if can_upload %}
+    <form method="post" action="/programs/{{ program.id }}/delete" onsubmit="return confirm('Delete this entire program? This cannot be undone.')">
+      <button type="submit" class="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-700 font-semibold">Delete program</button>
+    </form>
+    {% endif %}
+  </div>
+
+  <h1 class="text-2xl font-bold text-navy-900 mt-3">{{ program.title }}</h1>
+  <p class="text-sm text-slate-500 mb-2">
+    {{ church.name if church else '' }}
+    {% if program.program_date %} · {{ program.program_date }}{% endif %}
+    {% if program.location %} · {{ program.location }}{% endif %}
+  </p>
+  {% if program.description %}
+  <p class="text-slate-700 mb-6 leading-relaxed">{{ program.description }}</p>
+  {% else %}
+  <div class="mb-6"></div>
+  {% endif %}
+
+  {% if can_request_home %}
+  <div class="mb-6 rounded-2xl border border-indigo-200 bg-indigo-50 p-5 shadow-sm">
+    <p class="font-semibold text-indigo-900 text-sm mb-1">Public home page showcase</p>
+    <p class="text-xs text-indigo-800/80 mb-3">
+      Global programs only. General Admin must approve and set display time (1–24 hours).
+    </p>
+    {% if home_featured %}
+    <p class="text-sm text-emerald-800 font-medium mb-3">
+      ✓ Approved for the public home page{% if home_ends_at %} until {{ home_ends_at }} UTC{% endif %}.
+    </p>
+    <form method="post" action="/programs/{{ program.id }}/cancel-home-request">
+      <button type="submit" class="px-4 py-2 rounded-xl border border-red-200 bg-white text-red-700 text-sm font-semibold hover:bg-red-50">
+        Stop home page display
+      </button>
+    </form>
+    {% elif home_requested %}
+    <p class="text-sm text-amber-800 font-medium mb-3">
+      ⏳ Request sent — waiting for General Admin approval.
+    </p>
+    <form method="post" action="/programs/{{ program.id }}/cancel-home-request">
+      <button type="submit" class="px-4 py-2 rounded-xl border bg-white text-sm font-semibold hover:bg-slate-50">
+        Cancel request
+      </button>
+    </form>
+    {% else %}
+    <form method="post" action="/programs/{{ program.id }}/request-home">
+      <button type="submit" class="px-5 py-2.5 rounded-xl bg-indigo-700 text-white text-sm font-bold shadow hover:bg-indigo-800">
+        Display on home page
+      </button>
+    </form>
+    <p class="text-xs text-slate-600 mt-2">
+      Optional. If you skip this, the program stays on church pages only.
+    </p>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if can_upload %}
+  <p class="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 mb-3">
+    Upload <strong>either a photo or a video</strong> — not both. A new upload replaces the current media.
+  </p>
+  <div class="grid sm:grid-cols-2 gap-4 mb-6">
+  <form method="post" action="/programs/{{ program.id }}/photo" enctype="multipart/form-data"
+        class="bg-blue-50 border border-blue-100 rounded-xl p-4 flex flex-col gap-3">
+    <p class="text-xs font-semibold text-blue-900 uppercase">Picture</p>
+    <div>
+      <label class="text-xs font-semibold text-slate-600">Upload photo (removes any video)</label>
+      <input type="file" name="file" accept="image/*" required class="w-full mt-1 text-sm">
+    </div>
+    <input name="caption" placeholder="Caption" class="px-3 py-2 rounded-lg border text-sm">
+    <button type="submit" class="px-4 py-2.5 rounded-lg bg-blue-800 text-white text-sm font-semibold">Upload photo</button>
+  </form>
+  <form method="post" action="/programs/{{ program.id }}/video" enctype="multipart/form-data"
+        class="bg-indigo-50 border border-indigo-100 rounded-xl p-4 flex flex-col gap-3">
+    <p class="text-xs font-semibold text-indigo-900 uppercase">Video</p>
+    <div>
+      <label class="text-xs font-semibold text-slate-600">Upload video (removes any photo)</label>
+      <input type="file" name="file" accept="video/mp4,video/webm,video/quicktime" required class="w-full mt-1 text-sm">
+    </div>
+    <input name="caption" placeholder="Caption" class="px-3 py-2 rounded-lg border text-sm">
+    <button type="submit" class="px-4 py-2.5 rounded-lg bg-indigo-700 text-white text-sm font-semibold">Upload video</button>
+  </form>
+  </div>
+  {% else %}
+  <p class="text-xs text-slate-500 mb-4">Photos are uploaded by church admin. You can like, comment and download.</p>
+  {% endif %}
+
+  {% if videos %}
+  <h2 class="text-sm font-semibold text-slate-500 uppercase mb-3">Videos</h2>
+  <div class="space-y-6 mb-10">
+    {% for v in videos %}
+    <div class="bg-white border rounded-2xl overflow-hidden shadow-sm">
+      <video src="{{ v.path }}" controls playsinline class="w-full max-h-[28rem] bg-black"></video>
+      <div class="p-4 flex flex-wrap justify-between gap-2 items-center">
+        {% if v.caption %}<p class="text-sm text-slate-700">{{ v.caption }}</p>{% else %}<span></span>{% endif %}
+        {% if can_upload %}
+        <form method="post" action="/programs/video/{{ v.id }}/delete" onsubmit="return confirm('Delete this video?')">
+          <button type="submit" class="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-700 font-semibold">Delete video</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <h2 class="text-sm font-semibold text-slate-500 uppercase mb-3">Pictures</h2>
+  <div class="space-y-8">
+    {% for ph in photos %}
+    <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+      <img src="{{ ph.path }}" alt="" class="w-full max-h-[28rem] object-contain bg-slate-100">
+      <div class="p-4">
+        {% if ph.caption %}<p class="text-sm text-slate-700 mb-3">{{ ph.caption }}</p>{% endif %}
+        {% if can_upload %}
+        <div class="flex flex-wrap gap-2 mb-3 text-xs">
+          <form method="post" action="/programs/photo/{{ ph.id }}/caption" class="flex flex-wrap gap-2 flex-1 min-w-[12rem]">
+            <input name="caption" value="{{ ph.caption or '' }}" placeholder="Edit caption" class="flex-1 min-w-[8rem] px-2 py-1.5 rounded border text-sm">
+            <button type="submit" class="px-3 py-1.5 rounded-lg border font-semibold">Save caption</button>
+          </form>
+          <form method="post" action="/programs/photo/{{ ph.id }}/delete" onsubmit="return confirm('Delete this picture?')">
+            <button type="submit" class="px-3 py-1.5 rounded-lg border border-red-200 text-red-700 font-semibold">Delete picture</button>
+          </form>
+        </div>
+        <p class="text-xs text-slate-500 mb-3">A new upload above <strong>replaces</strong> this picture and re-requests home-page approval when applicable.</p>
+        {% endif %}
+        <div class="flex flex-wrap gap-4 text-sm mb-4 items-center">
+          <form method="post" action="/programs/photo/{{ ph.id }}/like">
+            <button type="submit" class="font-semibold {% if ph.liked %}text-rose-600{% else %}text-slate-600{% endif %}">
+              ♥ {{ ph.likes }} like{% if ph.likes != 1 %}s{% endif %}
+            </button>
+          </form>
+          <a href="/programs/photo/{{ ph.id }}/download" class="text-blue-700 font-medium">Download</a>
+        </div>
+        <div class="border-t border-slate-100 pt-3">
+          <p class="text-xs font-semibold text-slate-500 uppercase mb-2">Comments ({{ ph.comments|length }})</p>
+          <ul class="space-y-2 mb-3 max-h-48 overflow-y-auto">
+            {% for c in ph.comments %}
+            <li class="text-sm bg-slate-50 rounded-lg px-3 py-2" x-data="{ editing: false }">
+              <div class="flex flex-wrap justify-between gap-2">
+                <div>
+                  <span class="font-semibold text-navy-900">{{ c.user }}</span>
+                  <span class="text-slate-400 text-xs ml-1">{{ c.at }}</span>
+                </div>
+                <div class="flex gap-2 text-xs">
+                  {% if c.user_id == user.id %}
+                  <button type="button" @click="editing = !editing" class="text-blue-700 font-medium">Edit</button>
+                  <form method="post" action="/programs/photo/comment/{{ c.id }}/delete" onsubmit="return confirm('Delete this comment?')">
+                    <button type="submit" class="text-red-600 font-medium">Delete</button>
+                  </form>
+                  {% elif (user.role.value if user.role.value is defined else user.role) in ['church_admin','general_admin'] %}
+                  <form method="post" action="/programs/photo/comment/{{ c.id }}/delete" onsubmit="return confirm('Remove this comment?')">
+                    <button type="submit" class="text-red-600 font-medium">Remove</button>
+                  </form>
+                  {% endif %}
+                </div>
+              </div>
+              <p class="text-slate-700 mt-0.5" x-show="!editing">{{ c.body }}</p>
+              {% if c.user_id == user.id %}
+              <form method="post" action="/programs/photo/comment/{{ c.id }}/edit" class="mt-2 flex gap-2" x-show="editing" x-cloak>
+                <input name="body" value="{{ c.body }}" required class="flex-1 px-2 py-1.5 rounded border text-sm">
+                <button type="submit" class="px-3 py-1.5 rounded bg-blue-700 text-white text-xs font-semibold">Save</button>
+              </form>
+              {% endif %}
+            </li>
+            {% else %}
+            <li class="text-sm text-slate-400">No comments yet — be the first.</li>
+            {% endfor %}
+          </ul>
+          <form method="post" action="/programs/photo/{{ ph.id }}/comment" class="flex flex-col sm:flex-row gap-2">
+            <input name="body" required placeholder="Write a comment…" class="flex-1 px-3 py-2 rounded-lg border text-sm">
+            <button type="submit" class="px-4 py-2 rounded-lg bg-blue-700 text-white text-sm font-semibold">Comment</button>
+          </form>
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <p class="text-slate-500 text-sm py-8 text-center border border-dashed rounded-2xl">No photos on this program yet.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

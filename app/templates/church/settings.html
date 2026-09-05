@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Church settings{% endblock %}
+{% block content %}
+<div class="max-w-lg mx-auto px-4 py-8">
+  <h1 class="text-xl font-bold mb-2">Church public details</h1>
+
+  <div class="bg-white rounded-2xl border p-5 mb-6 shadow-sm">
+    <h2 class="font-semibold text-navy-900 mb-1">Church logo</h2>
+    <p class="text-xs text-slate-500 mb-3">Shown on your church pages and on public home-page program adverts (Global programs).</p>
+    {% if church.logo_url %}
+    <div class="flex flex-wrap items-center gap-4 mb-3">
+      <img src="{{ church.logo_url }}" alt="Logo" class="h-20 w-20 object-contain rounded-xl border bg-white p-1">
+      <form method="post" action="/church/settings/logo/remove" onsubmit="return confirm('Remove logo?')">
+        <button class="text-sm text-red-600 font-semibold">Remove logo</button>
+      </form>
+    </div>
+    {% endif %}
+    <form method="post" action="/church/settings/logo" enctype="multipart/form-data" class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-end">
+      <div class="flex-1">
+        <label class="text-xs font-semibold text-slate-600">Upload image (PNG, JPG, WEBP)</label>
+        <input type="file" name="file" accept="image/*" required class="w-full mt-1 text-sm">
+      </div>
+      <button class="px-4 py-2.5 rounded-xl bg-indigo-700 text-white text-sm font-semibold">Save logo</button>
+    </form>
+  </div>
+
+  <p class="text-sm text-slate-500 mb-6">Shown on member dashboards (address, pastor, remittance accounts).</p>
+  <form method="post" action="/church/settings" class="bg-white rounded-2xl border p-6 space-y-3">
+    <input name="address" value="{{ church.address or '' }}" placeholder="Church address" class="w-full px-3 py-2 rounded-xl border">
+    <input name="resident_pastor" value="{{ church.resident_pastor or '' }}" placeholder="Resident pastor" class="w-full px-3 py-2 rounded-xl border">
+    <input name="pastor_phone" value="{{ church.pastor_phone or church.phone or '' }}" placeholder="Pastor phone" class="w-full px-3 py-2 rounded-xl border">
+    <input name="pastor_email" value="{{ church.pastor_email or church.email or '' }}" placeholder="Pastor email" class="w-full px-3 py-2 rounded-xl border">
+    <textarea name="weekly_activities_note" rows="2" placeholder="Weekly activities note" class="w-full px-3 py-2 rounded-xl border">{{ church.weekly_activities_note or church.activity_days or '' }}</textarea>
+    <hr>
+    <p class="text-sm font-semibold">Tithe account</p>
+    <input name="tithe_account_name" value="{{ church.tithe_account_name or '' }}" placeholder="Account name" class="w-full px-3 py-2 rounded-xl border">
+    <input name="tithe_account_number" value="{{ church.tithe_account_number or '' }}" placeholder="Account number" class="w-full px-3 py-2 rounded-xl border">
+    <input name="tithe_bank_name" value="{{ church.tithe_bank_name or '' }}" placeholder="Bank" class="w-full px-3 py-2 rounded-xl border">
+    <p class="text-sm font-semibold">Offering account</p>
+    <input name="offering_account_name" value="{{ church.offering_account_name or '' }}" placeholder="Account name" class="w-full px-3 py-2 rounded-xl border">
+    <input name="offering_account_number" value="{{ church.offering_account_number or '' }}" placeholder="Account number" class="w-full px-3 py-2 rounded-xl border">
+    <input name="offering_bank_name" value="{{ church.offering_bank_name or '' }}" placeholder="Bank" class="w-full px-3 py-2 rounded-xl border">
+    <button class="w-full py-3 rounded-xl bg-blue-700 text-white font-semibold">Save</button>
+  
+      <div class="grid sm:grid-cols-2 gap-3 mt-4">
+        <div>
+          <label class="text-sm font-medium text-slate-700">Country (for map)</label>
+          <input name="country_name" value="{{ church.country_name or '' }}" class="w-full mt-1 px-3 py-2 rounded-xl border" placeholder="Nigeria">
+        </div>
+        <div>
+          <label class="text-sm font-medium text-slate-700">State (for map)</label>
+          <input name="state_name" value="{{ church.state_name or '' }}" class="w-full mt-1 px-3 py-2 rounded-xl border" placeholder="Lagos">
+        </div>
+        <div>
+          <label class="text-sm font-medium text-slate-700">Latitude</label>
+          <input name="latitude" type="number" step="any" value="{{ church.latitude if church.latitude is not none else '' }}"
+                 class="w-full mt-1 px-3 py-2 rounded-xl border" placeholder="6.6018">
+        </div>
+        <div>
+          <label class="text-sm font-medium text-slate-700">Longitude</label>
+          <input name="longitude" type="number" step="any" value="{{ church.longitude if church.longitude is not none else '' }}"
+                 class="w-full mt-1 px-3 py-2 rounded-xl border" placeholder="3.3515">
+        </div>
+      </div>
+      <p class="text-xs text-slate-500 mt-2">Latitude &amp; longitude place this church on the global map.</p>
+      </form>
+</div>
+{% endblock %}

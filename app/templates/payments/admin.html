@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Admin – Payments{% endblock %}
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-8">
+  <a href="/admin/" class="text-sm text-blue-700 font-medium">← Admin</a>
+  <h1 class="text-2xl font-bold text-navy-900 mt-2 mb-1">Payments</h1>
+  <p class="text-sm text-slate-500 mb-6">Set bank details shown to every church admin. Create invoices, confirm payments, and issue receipts.</p>
+
+  <form method="post" action="/admin/payments/settings" class="bg-white rounded-2xl border p-6 mb-8 space-y-3 shadow-sm">
+    <h2 class="font-semibold">Payment details (visible to church admins)</h2>
+    <input name="title" required value="{{ settings.title }}" placeholder="Title *" class="w-full px-3 py-2 rounded-xl border">
+    <textarea name="instructions" rows="3" placeholder="Instructions" class="w-full px-3 py-2 rounded-xl border">{{ settings.instructions or "" }}</textarea>
+    <div class="grid sm:grid-cols-2 gap-3">
+      <input name="bank_name" value="{{ settings.bank_name or "" }}" placeholder="Bank name" class="px-3 py-2 rounded-xl border">
+      <input name="account_name" value="{{ settings.account_name or "" }}" placeholder="Account name" class="px-3 py-2 rounded-xl border">
+      <input name="account_number" value="{{ settings.account_number or "" }}" placeholder="Account number" class="px-3 py-2 rounded-xl border">
+      <input name="currency" value="{{ settings.currency or "NGN" }}" placeholder="Currency" class="px-3 py-2 rounded-xl border">
+      <input name="default_amount" type="number" step="0.01" min="0" value="{{ settings.default_amount }}" placeholder="Default amount" class="px-3 py-2 rounded-xl border">
+    </div>
+    <textarea name="other_details" rows="2" placeholder="Other details (WhatsApp, email for proof, etc.)" class="w-full px-3 py-2 rounded-xl border">{{ settings.other_details or "" }}</textarea>
+    <button class="px-5 py-2.5 rounded-xl bg-navy-900 text-white text-sm font-semibold">Save payment details</button>
+  </form>
+
+  <form method="post" action="/admin/payments/create" class="bg-slate-50 rounded-2xl border p-5 mb-8 grid sm:grid-cols-2 gap-3 text-sm">
+    <h2 class="sm:col-span-2 font-semibold text-base">Create invoice for a church</h2>
+    <select name="church_id" required class="px-3 py-2 rounded-xl border">
+      <option value="">Select church *</option>
+      {% for c in churches %}
+      <option value="{{ c.id }}">{{ c.name }} ({{ c.level.value if c.level.value is defined else c.level }})</option>
+      {% endfor %}
+    </select>
+    <input name="amount" type="number" step="0.01" min="0.01" required placeholder="Amount *" class="px-3 py-2 rounded-xl border">
+    <input name="currency" value="{{ settings.currency or "NGN" }}" placeholder="Currency" class="px-3 py-2 rounded-xl border">
+    <input name="description" placeholder="Description" class="px-3 py-2 rounded-xl border">
+    <button class="sm:col-span-2 py-2.5 rounded-xl bg-teal-600 text-white font-semibold">Create pending invoice</button>
+  </form>
+
+  <h2 class="font-semibold text-lg mb-3">All payment records</h2>
+  <div class="space-y-3">
+    {% for row in rows %}
+    <div class="bg-white rounded-2xl border p-4 flex flex-wrap gap-3 justify-between items-start">
+      <div>
+        <p class="font-semibold">{{ row.church.name if row.church else "Church" }} · {{ row.p.currency }} {{ "%.2f"|format(row.p.amount) }}</p>
+        <p class="text-xs text-slate-500">{{ row.p.reference }} · {{ row.p.status }} · {{ row.p.description or "" }}</p>
+        {% if row.p.status == 'confirmed' %}
+        <p class="text-xs text-emerald-700 mt-1">Receipt {{ row.p.receipt_number }} · {{ row.p.confirmed_at }}</p>
+        {% endif %}
+      </div>
+      <div class="flex flex-wrap gap-2">
+        {% if row.p.status == 'pending' %}
+        <form method="post" action="/admin/payments/{{ row.p.id }}/confirm" class="flex gap-2 items-center">
+          <input name="receipt_note" placeholder="Receipt note" class="px-2 py-1 rounded border text-xs w-40">
+          <button class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold">Confirm & send receipt</button>
+        </form>
+        <form method="post" action="/admin/payments/{{ row.p.id }}/cancel">
+          <button class="px-3 py-1.5 rounded-lg border text-xs text-red-700">Cancel</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+    {% else %}
+    <p class="text-sm text-slate-400">No payment records yet.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

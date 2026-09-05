@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}{{ empty_title|default("No information") }} – Churchgate{% endblock %}
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-10">
+  {% set empty_title = empty_title|default("No information to display") %}
+  {% set empty_message = empty_message|default("There is nothing here yet.") %}
+  {% set back_url = back_url|default("javascript:history.back()") %}
+  {% include "partials/empty_state.html" %}
+</div>
+{% endblock %}

@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}New Special Project{% endblock %}
+{% block content %}
+<div class="max-w-lg mx-auto px-4 py-8">
+  <h1 class="text-xl font-bold mb-6">Create special project</h1>
+  <form method="post" action="/projects/create" class="bg-white rounded-2xl border p-6 space-y-3">
+    <input name="title" required placeholder="Project title *" class="w-full px-3 py-2 rounded-xl border">
+    <textarea name="description" rows="2" placeholder="Description" class="w-full px-3 py-2 rounded-xl border"></textarea>
+    <input type="number" step="0.01" name="target_amount" placeholder="Target amount" class="w-full px-3 py-2 rounded-xl border">
+    <input name="account_name" placeholder="Account name" class="w-full px-3 py-2 rounded-xl border">
+    <input name="account_number" placeholder="Account number" class="w-full px-3 py-2 rounded-xl border">
+    <input name="bank_name" placeholder="Bank name" class="w-full px-3 py-2 rounded-xl border">
+    <button class="w-full py-3 rounded-xl bg-blue-700 text-white font-semibold">Create project</button>
+  </form>
+</div>
+{% endblock %}

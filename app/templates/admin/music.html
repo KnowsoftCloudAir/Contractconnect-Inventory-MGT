@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Music links – Admin{% endblock %}
+{% block content %}
+<div class="max-w-3xl mx-auto px-4 py-8">
+  <a href="/admin/" class="text-sm text-blue-700 font-medium">← Admin</a>
+  <h1 class="text-2xl font-bold mt-2 mb-1">Inspiration music (YouTube)</h1>
+  <p class="text-sm text-slate-500 mb-6">Only tracks you list here appear on the member page. Paste a YouTube <strong>video ID</strong> or full watch URL. Prefer official lyric/live videos that allow embedding.</p>
+
+  <form method="post" action="/admin/music/add" class="bg-slate-50 border rounded-2xl p-4 mb-8 grid sm:grid-cols-2 gap-3">
+    <input name="title" required placeholder="Song title *" class="px-3 py-2 rounded-xl border">
+    <input name="youtube_id" required placeholder="YouTube ID or URL *" class="px-3 py-2 rounded-xl border">
+    <button class="sm:col-span-2 py-2.5 rounded-xl bg-indigo-700 text-white font-semibold">Add song</button>
+  </form>
+
+  <div class="space-y-4">
+    {% for L in links %}
+    <form method="post" action="/admin/music/{{ L.id }}/edit" class="bg-white border rounded-2xl p-4 space-y-2">
+      <div class="flex flex-wrap justify-between gap-2 text-xs">
+        <span class="{% if L.is_active %}text-emerald-700{% else %}text-slate-400{% endif %}">{{ "Active" if L.is_active else "Hidden" }}</span>
+        <a href="https://www.youtube.com/watch?v={{ L.youtube_id }}" target="_blank" class="text-blue-700">Preview ↗</a>
+      </div>
+      <input name="title" value="{{ L.title }}" class="w-full px-3 py-2 rounded-lg border text-sm">
+      <input name="youtube_id" value="{{ L.youtube_id }}" class="w-full px-3 py-2 rounded-lg border text-sm font-mono">
+      <input type="hidden" name="is_active" value="no">
+      <label class="text-xs flex items-center gap-2"><input type="checkbox" name="is_active" value="yes" {% if L.is_active %}checked{% endif %}> Show on member page</label>
+      <div class="flex gap-2">
+        <button class="px-3 py-1.5 rounded-lg bg-navy-900 text-white text-xs font-semibold">Save</button>
+      </div>
+    </form>
+    <form method="post" action="/admin/music/{{ L.id }}/delete" onsubmit="return confirm('Delete this song?')" class="-mt-2 mb-4">
+      <button class="text-xs text-red-600 font-semibold">Delete</button>
+    </form>
+    {% else %}
+    <p class="text-slate-400 text-sm">No songs yet — add one above.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

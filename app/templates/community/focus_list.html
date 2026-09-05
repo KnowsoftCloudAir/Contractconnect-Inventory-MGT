@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Focus groups{% endblock %}
+{% block content %}
+<div class="max-w-3xl mx-auto px-4 py-8">
+  <div class="flex flex-wrap justify-between gap-3 mb-6">
+    <div>
+      <h1 class="text-2xl font-bold text-navy-900">Focus groups</h1>
+      <p class="text-sm text-slate-500">Messages for selected members</p>
+    </div>
+    {% if can_manage %}
+    <a href="/focus-groups/new" class="px-4 py-2 rounded-xl bg-navy-900 text-white text-sm font-semibold">Create group</a>
+    {% endif %}
+  </div>
+  <ul class="space-y-3">
+    {% for g in groups %}
+    <li class="bg-white rounded-2xl border p-4 flex justify-between gap-3">
+      <div>
+        <p class="font-semibold">{{ g.name }}</p>
+        <p class="text-xs text-slate-500">{{ g.description or "" }}</p>
+      </div>
+      <a href="/focus-groups/{{ g.id }}" class="text-sm text-blue-700 font-semibold">Open</a>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endblock %}

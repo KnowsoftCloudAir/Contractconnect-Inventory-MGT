@@ -1,0 +1,309 @@
+{% extends "base.html" %}
+{% block title %}Dashboard – Churchgate{% endblock %}
+{% block content %}
+{% if church and church.logo_url %}
+<div class="max-w-6xl mx-auto px-4 pt-6">
+  <img src="{{ church.logo_url }}" alt="{{ church.name }} logo" class="h-16 w-auto object-contain mb-2">
+</div>
+{% endif %}
+
+<style>
+  .dash-bg { background: linear-gradient(160deg, #0f172a 0%, #1e3a8a 55%, #1e40af 100%); }
+  .stat-card { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); }
+</style>
+<div class="min-h-[calc(100vh-3.5rem)] dash-bg text-white">
+  <div class="max-w-6xl mx-auto px-4 py-8">
+    {% if church %}
+    <div class="mb-8 flex flex-wrap justify-between gap-4 items-start">
+      <div>
+        <p class="text-blue-200 text-xs font-semibold uppercase tracking-wider mb-1">Church dashboard</p>
+        <h1 class="text-2xl sm:text-3xl font-bold">{{ church.name }}</h1>
+        <p class="text-sm text-blue-200/80 mt-1">
+          <code class="bg-white/10 px-1.5 rounded">{{ church.code }}</code>
+          · {% if church.level.value is defined %}{{ church.level.value }}{% else %}{{ church.level }}{% endif %}
+          · {{ church.resident_pastor or "—" }}
+        </p>
+      </div>
+      <a href="/district/reports/pdf" class="px-4 py-2 rounded-xl bg-amber-400 text-slate-900 text-sm font-bold shadow">Download PDF report</a>
+    </div>
+    {% else %}
+    <h1 class="text-2xl font-bold mb-6">Dashboard</h1>
+    {% endif %}
+
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div class="stat-card rounded-2xl p-5">
+        <p class="text-xs text-blue-200 uppercase">Registered members</p>
+        <p class="text-3xl font-bold mt-1">{{ members_count }}</p>
+      </div>
+      <div class="stat-card rounded-2xl p-5">
+        <p class="text-xs text-blue-200 uppercase">Sub-churches</p>
+        <p class="text-3xl font-bold mt-1">{{ children|length }}</p>
+      </div>
+      <div class="stat-card rounded-2xl p-5">
+        <p class="text-xs text-blue-200 uppercase">Latest attendance</p>
+        <p class="text-3xl font-bold mt-1">{{ latest_attendance }}</p>
+      </div>
+      <div class="stat-card rounded-2xl p-5">
+        <p class="text-xs text-blue-200 uppercase">Tithe (period)</p>
+        <p class="text-2xl font-bold mt-1">{{ "%.0f"|format(total_tithe) }}</p>
+      </div>
+    </div>
+
+    <!-- Demographics -->
+    
+        {% if is_global_view %}
+    <div class="stat-card rounded-2xl p-6 mb-8" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12)">
+      <h2 class="font-semibold mb-2 text-white">World map of assemblies</h2>
+      <p class="text-sm text-blue-200 mb-3">
+        <strong class="text-white">Blue circles</strong> = number of churches in a country.
+        <strong class="text-white">Pins</strong> = individual church locations (exact or estimated).
+        Zoom in to explore by country and state.
+      </p>
+      <div id="churchMap" class="h-[28rem] rounded-xl overflow-hidden bg-slate-900/40 border border-white/10" style="z-index:0"></div>
+      <div class="grid md:grid-cols-2 gap-4 mt-4">
+        <div class="overflow-x-auto">
+          <h3 class="text-sm font-semibold text-amber-300 mb-2">Churches by country</h3>
+          <table class="w-full text-sm text-left text-white">
+            <thead><tr class="text-blue-200"><th class="py-1 pr-4">Country</th><th class="py-1">Churches</th></tr></thead>
+            <tbody>
+            {% for c in country_summary or [] %}
+              <tr class="border-t border-white/10"><td class="py-1.5 pr-4">{{ c.country }}</td><td class="py-1.5 font-semibold">{{ c.count }}</td></tr>
+            {% else %}
+              <tr><td colspan="2" class="py-2 text-blue-200/70 text-xs">No country counts yet — set country on Church info.</td></tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="overflow-x-auto">
+          <h3 class="text-sm font-semibold text-amber-300 mb-2">Churches by state</h3>
+          <table class="w-full text-sm text-left text-white">
+            <thead><tr class="text-blue-200"><th class="py-1 pr-4">Country</th><th class="py-1 pr-4">State</th><th class="py-1">Churches</th></tr></thead>
+            <tbody>
+            {% for s in state_summary or [] %}
+              <tr class="border-t border-white/10"><td class="py-1.5 pr-4">{{ s.country }}</td><td class="py-1.5 pr-4">{{ s.state }}</td><td class="py-1.5 font-semibold">{{ s.count }}</td></tr>
+            {% else %}
+              <tr><td colspan="3" class="py-2 text-blue-200/70 text-xs">No state counts yet — set state on Church info.</td></tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% if not map_markers %}
+      <p class="text-xs text-blue-200/80 mt-3">No pins yet. Under <strong>Church info</strong> set latitude/longitude (or at least country/state) for each assembly.</p>
+      {% endif %}
+    </div>
+    {% endif %}
+
+{% if demo %}
+    <div class="grid lg:grid-cols-3 gap-6 mb-8">
+      <div class="stat-card rounded-2xl p-6 lg:col-span-1">
+        <h2 class="font-semibold mb-4">Membership mix</h2>
+        <div class="h-52"><canvas id="pieMembers"></canvas></div>
+      </div>
+      <div class="stat-card rounded-2xl p-6 lg:col-span-2">
+        <h2 class="font-semibold mb-4">By age & sex</h2>
+        <div class="h-52"><canvas id="barDemo"></canvas></div>
+      </div>
+    </div>
+    <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-8 text-sm">
+      <div class="stat-card rounded-xl p-4">Men (adult/YA): <strong>{{ demo.men }}</strong></div>
+      <div class="stat-card rounded-xl p-4">Women (adult/YA): <strong>{{ demo.women }}</strong></div>
+      <div class="stat-card rounded-xl p-4">Youth boys: <strong>{{ demo.youth_boys }}</strong></div>
+      <div class="stat-card rounded-xl p-4">Youth girls: <strong>{{ demo.youth_girls }}</strong></div>
+      <div class="stat-card rounded-xl p-4">Young adult men: <strong>{{ demo.ya_boys }}</strong></div>
+      <div class="stat-card rounded-xl p-4">Young adult women: <strong>{{ demo.ya_girls }}</strong></div>
+      <div class="stat-card rounded-xl p-4">Children boys: <strong>{{ demo.children_boys }}</strong></div>
+      <div class="stat-card rounded-xl p-4">Children girls: <strong>{{ demo.children_girls }}</strong></div>
+    </div>
+    <div class="grid sm:grid-cols-2 gap-4 mb-8">
+      <div class="stat-card rounded-2xl p-5">
+        <h3 class="font-semibold text-amber-300 mb-2">Newcomers (from weekly stats)</h3>
+        <p class="text-sm">Men: {{ demo.newcomers_men }} · Women: {{ demo.newcomers_women }} · Children: {{ demo.newcomers_children }}</p>
+      </div>
+      <div class="stat-card rounded-2xl p-5">
+        <h3 class="font-semibold text-amber-300 mb-2">New converts (from weekly stats)</h3>
+        <p class="text-sm">Men: {{ demo.converts_men }} · Women: {{ demo.converts_women }} · Children: {{ demo.converts_children }}</p>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if chart_labels and chart_labels|length > 0 %}
+    <div class="grid lg:grid-cols-2 gap-6 mb-8">
+      <div class="stat-card rounded-2xl p-6">
+        <h2 class="font-semibold mb-4">Attendance trend</h2>
+        <div class="h-56"><canvas id="attChart"></canvas></div>
+      </div>
+      <div class="stat-card rounded-2xl p-6">
+        <h2 class="font-semibold mb-4">Finance</h2>
+        <div class="h-56"><canvas id="finChart"></canvas></div>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if children %}
+    <div class="stat-card rounded-2xl p-6 mb-8">
+      <h2 class="font-semibold mb-4">Sub-churches under this unit</h2>
+      <ul class="divide-y divide-white/10">
+        {% for ch in children %}
+        <li class="py-3 flex flex-wrap justify-between gap-2 text-sm">
+          <span class="font-medium">{{ ch.name }}</span>
+          <span class="text-blue-200"><code class="text-xs bg-white/10 px-1 rounded">{{ ch.code }}</code>
+            · {% if ch.level.value is defined %}{{ ch.level.value }}{% else %}{{ ch.level }}{% endif %}
+            · {{ ch.approval_status }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    {% if church %}
+    <div class="flex flex-wrap gap-3">
+      <a href="/district/stats/enter" class="px-5 py-3 rounded-xl bg-amber-400 text-slate-900 text-sm font-bold shadow-lg">Weekly attendance</a>
+      <a href="/district/members" class="px-5 py-3 rounded-xl bg-white text-blue-900 text-sm font-bold shadow-lg border-2 border-amber-300">View members list</a>
+      <a href="/district/approvals" class="px-5 py-3 rounded-xl bg-blue-500 text-white text-sm font-semibold shadow">Approvals & privileges</a>
+      <a href="/programs/" class="px-5 py-3 rounded-xl bg-indigo-500 text-white text-sm font-semibold shadow">Programs & photos</a>
+      <a href="/church/network" class="px-5 py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold shadow">Church network</a>
+      <a href="/church/create-child" class="px-5 py-3 rounded-xl bg-slate-800 text-white text-sm font-semibold border border-white/40">Create sub-church</a>
+      <a href="/district/reports/pdf" class="px-5 py-3 rounded-xl bg-emerald-500 text-white text-sm font-bold shadow">Download PDF report</a>
+    </div>
+    <p class="mt-4 text-sm text-blue-100 max-w-2xl">Members, workers and leaders under this unit and its sub-churches. Use <strong class="text-white">Approvals</strong> to grant roles; open a member on the list to change status after approval.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function(){
+  const labels = {{ (chart_labels if chart_labels is defined else [])|tojson }};
+  const att = {{ (chart_attendance if chart_attendance is defined else [])|tojson }};
+  const off = {{ (chart_offering if chart_offering is defined else [])|tojson }};
+  const tithe = {{ (chart_tithe if chart_tithe is defined else [])|tojson }};
+  const don = {{ (chart_donation if chart_donation is defined else [])|tojson }};
+  const demo = {{ (demo if demo is defined else {})|tojson }};
+
+  if (labels && labels.length && document.getElementById('attChart')) {
+    new Chart(document.getElementById('attChart'), {
+      type: 'bar',
+      data: { labels, datasets: [{ label: 'Attendance', data: att, backgroundColor: 'rgba(147,197,253,0.7)' }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#e2e8f0' } } },
+        scales: { x: { ticks: { color: '#cbd5e1' } }, y: { ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(255,255,255,0.08)' } } } }
+    });
+  }
+  if (labels && labels.length && document.getElementById('finChart')) {
+    new Chart(document.getElementById('finChart'), {
+      type: 'line',
+      data: { labels, datasets: [
+        { label: 'Offering', data: off, borderColor: '#93c5fd', tension: 0.3 },
+        { label: 'Tithe', data: tithe, borderColor: '#fbbf24', tension: 0.3 },
+        { label: 'Donation', data: don, borderColor: '#34d399', tension: 0.3 }
+      ]},
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#e2e8f0' } } },
+        scales: { x: { ticks: { color: '#cbd5e1' } }, y: { ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(255,255,255,0.08)' } } } }
+    });
+  }
+  // Membership mix pie
+  if (demo && document.getElementById('pieMembers')) {
+    const pieData = [
+      demo.men||0, demo.women||0, demo.youth_boys||0, demo.youth_girls||0,
+      demo.ya_boys||0, demo.ya_girls||0, demo.children_boys||0, demo.children_girls||0
+    ];
+    const pieSum = pieData.reduce((a,b)=>a+b,0);
+    if (pieSum > 0) {
+      new Chart(document.getElementById('pieMembers'), {
+        type: 'pie',
+        data: {
+          labels: ['Men','Women','Youth boys','Youth girls','YA boys','YA girls','Boys','Girls'],
+          datasets: [{
+            data: pieData,
+            backgroundColor: ['#3b82f6','#ec4899','#60a5fa','#f472b6','#2563eb','#db2777','#93c5fd','#f9a8d4']
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { position: 'bottom', labels: { color: '#e2e8f0', boxWidth: 12 } } }
+        }
+      });
+    }
+  }
+  // By age & sex bar
+  if (demo && document.getElementById('barDemo')) {
+    new Chart(document.getElementById('barDemo'), {
+      type: 'bar',
+      data: {
+        labels: ['Men','Women','Youth ♂','Youth ♀','YA ♂','YA ♀','Boys','Girls'],
+        datasets: [{
+          label: 'Members',
+          data: [
+            demo.men||0, demo.women||0, demo.youth_boys||0, demo.youth_girls||0,
+            demo.ya_boys||0, demo.ya_girls||0, demo.children_boys||0, demo.children_girls||0
+          ],
+          backgroundColor: ['#3b82f6','#ec4899','#60a5fa','#f472b6','#2563eb','#db2777','#93c5fd','#f9a8d4']
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { color: '#cbd5e1' }, grid: { display: false } },
+          y: { ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(255,255,255,0.08)' }, beginAtZero: true }
+        }
+      }
+    });
+  }
+
+  {% if is_global_view %}
+  var markers = {{ (map_markers if map_markers is defined else [])|tojson }};
+  var countrySummary = {{ (country_summary if country_summary is defined else [])|tojson }};
+  var el = document.getElementById('churchMap');
+  if (el && typeof L !== 'undefined') {
+    var map = L.map('churchMap').setView([20,0], 2);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 14, attribution: '&copy; OpenStreetMap'
+    }).addTo(map);
+    var bounds = [];
+
+    // Country count circles (number of churches in country)
+    (countrySummary || []).forEach(function(c) {
+      if (c.lat == null || c.lng == null || !c.count) return;
+      var radius = Math.min(40, 12 + (c.count * 4));
+      var circle = L.circleMarker([c.lat, c.lng], {
+        radius: radius,
+        color: '#93c5fd',
+        fillColor: '#2563eb',
+        fillOpacity: 0.55,
+        weight: 2
+      }).addTo(map);
+      circle.bindPopup('<strong>'+c.country+'</strong><br>'+c.count+' church'+(c.count===1?'':'es')+' in network');
+      circle.bindTooltip(String(c.count), {
+        permanent: true, direction: 'center', className: 'map-count-label'
+      });
+      bounds.push([c.lat, c.lng]);
+    });
+
+    // Individual church location pins
+    (markers || []).forEach(function(m) {
+      if (m.lat == null || m.lng == null) return;
+      var mk = L.marker([m.lat, m.lng]).addTo(map);
+      var src = m.source === 'exact' ? 'Exact location' : (m.source === 'state' ? 'State estimate' : 'Country estimate');
+      mk.bindPopup(
+        '<strong>'+m.name+'</strong><br>'+
+        (m.level||'')+' · <code>'+(m.code||'')+'</code><br>'+
+        (m.country||'')+(m.state ? ' · '+m.state : '')+'<br>'+
+        (m.address||'')+'<br><em style="font-size:11px;color:#64748b">'+src+'</em>'
+      );
+      bounds.push([m.lat, m.lng]);
+    });
+
+    if (bounds.length) map.fitBounds(bounds, { padding: [40,40], maxZoom: 7 });
+    setTimeout(function(){ map.invalidateSize(); }, 300);
+  }
+  {% endif %}
+})();
+</script>
+{% endblock %}
+

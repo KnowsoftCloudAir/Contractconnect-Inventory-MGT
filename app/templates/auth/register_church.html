@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Register Church – Churchgate</title>
+  <link rel="icon" href="/static/img/knowsoft-logo.png" type="image/png">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>[x-cloak]{display:none!important}</style>
+</head>
+<body class="min-h-screen bg-slate-100 font-sans antialiased" x-data="churchReg()">
+  <div class="max-w-xl mx-auto px-4 py-10">
+    <a href="/" class="text-sm text-blue-700 mb-4 inline-block">← Home</a>
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sm:p-8">
+      <h1 class="text-2xl font-bold text-slate-900 mb-1">Register a church</h1>
+      <p class="text-sm text-slate-500 mb-6">Select level. Global needs no parent. Country/state lists come from the world directory.</p>
+      {% if error %}<div class="mb-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm">{{ error }}</div>{% endif %}
+      <form method="post" action="/auth/register-church" class="space-y-4">
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 mb-1.5">Church level *</label>
+          <select name="level" x-model="level" @change="onLevelChange()" required class="w-full px-3 py-2.5 rounded-xl border">
+            <option value="">— Select level —</option>
+            <option value="global">Global Church</option>
+            <option value="country">Country Church</option>
+            <option value="state">State Church</option>
+            <option value="group">Group Church</option>
+            <option value="district">District Church</option>
+          </select>
+        </div>
+
+        <div class="space-y-3 p-4 rounded-xl bg-slate-50 border" x-show="level && level !== 'global'" x-cloak>
+          <p class="text-xs font-semibold text-slate-600 uppercase">Parent churches in Churchgate</p>
+          <div>
+            <label class="text-sm">Global parent *</label>
+            <select name="parent_global_id" x-model="globalId" @change="loadCountries()" class="w-full mt-1 px-3 py-2.5 rounded-xl border">
+              <option value="">— Select —</option>
+              <template x-for="g in globals" :key="g.id"><option :value="g.id" x-text="g.name + ' (' + g.code + ')'"></option></template>
+            </select>
+          </div>
+          <div x-show="needsCountry" x-cloak>
+            <label class="text-sm">Country parent *</label>
+            <select name="parent_country_id" x-model="countryId" @change="loadStates()" class="w-full mt-1 px-3 py-2.5 rounded-xl border">
+              <option value="">— Select —</option>
+              <template x-for="c in countries" :key="c.id"><option :value="c.id" x-text="c.name"></option></template>
+            </select>
+          </div>
+          <div x-show="needsState" x-cloak>
+            <label class="text-sm">State parent *</label>
+            <select name="parent_state_id" x-model="stateId" @change="loadGroups()" class="w-full mt-1 px-3 py-2.5 rounded-xl border">
+              <option value="">— Select —</option>
+              <template x-for="s in states" :key="s.id"><option :value="s.id" x-text="s.name"></option></template>
+            </select>
+          </div>
+          <div x-show="needsGroup" x-cloak>
+            <label class="text-sm">Group parent *</label>
+            <select name="parent_group_id" x-model="groupId" class="w-full mt-1 px-3 py-2.5 rounded-xl border">
+              <option value="">— Select —</option>
+              <template x-for="g in groups" :key="g.id"><option :value="g.id" x-text="g.name"></option></template>
+            </select>
+          </div>
+        </div>
+
+        <input name="name" required placeholder="Church / assembly name *" class="w-full px-4 py-3 rounded-xl border">
+        <div class="grid sm:grid-cols-2 gap-3">
+          <div>
+            <label class="text-sm font-medium">Country *</label>
+            <select name="country_name" x-model="geoCountry" @change="onGeoCountry()" required class="w-full mt-1 px-3 py-2.5 rounded-xl border">
+              <option value="">— Select country —</option>
+              <template x-for="c in allCountries" :key="c.code">
+                <option :value="c.name" x-text="c.name"></option>
+              </template>
+            </select>
+          </div>
+          <div>
+            <label class="text-sm font-medium">State / Province</label>
+            <!-- single name field: select when states exist, else text -->
+            <select x-show="geoStates.length > 0" x-cloak x-model="geoState" name="state_name"
+                    class="w-full mt-1 px-3 py-2.5 rounded-xl border">
+              <option value="">— Select state —</option>
+              <template x-for="s in geoStates" :key="s">
+                <option :value="s" x-text="s"></option>
+              </template>
+            </select>
+            <input x-show="geoStates.length === 0" x-cloak x-model="geoStateText"
+                   name="state_name" placeholder="Type state / province"
+                   class="w-full mt-1 px-3 py-2.5 rounded-xl border">
+          </div>
+        </div>
+        <textarea name="doctrine" rows="2" placeholder="Doctrine / statement of faith" class="w-full px-4 py-3 rounded-xl border"></textarea>
+        <input name="activity_days" placeholder="Activity days e.g. Sun, Wed, Fri" class="w-full px-4 py-3 rounded-xl border">
+        <input name="owner_name" required placeholder="Owner / founder name *" class="w-full px-4 py-3 rounded-xl border">
+        <input name="resident_pastor" required placeholder="Resident pastor *" class="w-full px-4 py-3 rounded-xl border">
+        <input name="address" placeholder="Address" class="w-full px-4 py-3 rounded-xl border">
+        <input name="phone" placeholder="Phone" class="w-full px-4 py-3 rounded-xl border">
+        <input type="email" name="email" required placeholder="Contact / admin email *" class="w-full px-4 py-3 rounded-xl border">
+        <input name="admin_full_name" required placeholder="Admin full name *" class="w-full px-4 py-3 rounded-xl border">
+        <input type="password" name="admin_password" required minlength="6" placeholder="Admin password (min 6) *" class="w-full px-4 py-3 rounded-xl border">
+        <button type="submit" class="w-full py-3.5 rounded-xl bg-slate-900 text-white font-semibold">Submit registration</button>
+      </form>
+    </div>
+  </div>
+  <script>
+  function churchReg() {
+    return {
+      level: '', globalId: '', countryId: '', stateId: '', groupId: '',
+      globals: [], countries: [], states: [], groups: [],
+      allCountries: [], geoCountry: '', geoState: '', geoStateText: '', geoStates: [],
+      get needsCountry() { return ['state','group','district'].includes(this.level); },
+      get needsState() { return ['group','district'].includes(this.level); },
+      get needsGroup() { return this.level === 'district'; },
+      async init() {
+        try { this.globals = await (await fetch('/api/churches-by-level?level=global')).json(); } catch(e) { this.globals = []; }
+        try { this.allCountries = await (await fetch('/api/geo/countries')).json(); } catch(e) { this.allCountries = []; }
+      },
+      onLevelChange() {
+        this.globalId=''; this.countryId=''; this.stateId=''; this.groupId='';
+        this.countries=[]; this.states=[]; this.groups=[];
+      },
+      onGeoCountry() {
+        const c = this.allCountries.find(x => x.name === this.geoCountry);
+        this.geoStates = (c && c.states) ? c.states : [];
+        this.geoState = ''; this.geoStateText = '';
+      },
+      async loadCountries() {
+        this.countries = this.globalId ? await (await fetch('/api/churches?parent_id='+this.globalId)).json() : [];
+        this.states=[]; this.groups=[]; this.countryId=''; this.stateId=''; this.groupId='';
+      },
+      async loadStates() {
+        this.states = this.countryId ? await (await fetch('/api/churches?parent_id='+this.countryId)).json() : [];
+        this.groups=[]; this.stateId=''; this.groupId='';
+      },
+      async loadGroups() {
+        this.groups = this.stateId ? await (await fetch('/api/churches?parent_id='+this.stateId)).json() : [];
+        this.groupId='';
+      },
+    }
+  }
+  </script>
+</body>
+</html>

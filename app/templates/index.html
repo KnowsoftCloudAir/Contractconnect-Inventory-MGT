@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+ <meta charset="UTF-8">
+ <meta name="viewport" content="width=device-width, initial-scale=1.0">
+ <title>Knowsoft Churchgate – One Body, Synchronized</title>
+ <link rel="icon" href="/static/icons/icon-192.png" type="image/png">
+ <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+ <link rel="manifest" href="/static/manifest.json">
+ <meta name="theme-color" content="#0B1220">
+ <meta name="mobile-web-app-capable" content="yes">
+ <meta name="apple-mobile-web-app-capable" content="yes">
+ <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+ <meta name="apple-mobile-web-app-title" content="Churchgate">
+ <script src="https://cdn.tailwindcss.com"></script>
+ <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet">
+ <script>
+ tailwind.config = {
+ theme: {
+ extend: {
+ fontFamily: {
+ sans: ['DM Sans', 'system-ui', 'sans-serif'],
+ display: ['Fraunces', 'Georgia', 'serif']
+ },
+ colors: {
+ ink: { 900: '#0c1222', 800: '#141b2d', 700: '#1c2740' },
+ sanctum: { 400: '#e8c547', 500: '#d4a017', 600: '#b8860b' },
+ glass: 'rgba(255,255,255,0.08)'
+ },
+ boxShadow: {
+ glow: '0 0 60px rgba(212, 160, 23, 0.25)',
+ lift: '0 25px 50px -12px rgba(12, 18, 34, 0.45)'
+ }
+ }
+ }
+ }
+ </script>
+ <style>
+ .hero-mesh {
+ background:
+ radial-gradient(ellipse 80% 50% at 20% 40%, rgba(212,160,23,0.18), transparent 50%),
+ radial-gradient(ellipse 60% 40% at 80% 20%, rgba(56,189,248,0.12), transparent 45%),
+ radial-gradient(ellipse 50% 60% at 70% 80%, rgba(99,102,241,0.1), transparent 40%),
+ linear-gradient(165deg, #0c1222 0%, #141b2d 45%, #1a2238 100%);
+ }
+ .glass-card {
+ background: rgba(255,255,255,0.04);
+ border: 1px solid rgba(255,255,255,0.1);
+ backdrop-filter: blur(12px);
+ }
+ .church-stage {
+ filter: drop-shadow(0 20px 40px rgba(0,0,0,0.4));
+ }
+ 
+ .flip-unit { perspective: 400px; }
+ .flip-panel {
+   display: inline-block; min-width: 2.1rem; padding: 0.35rem 0.4rem;
+   background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+   border: 1px solid rgba(255,255,255,0.12); border-radius: 0.4rem;
+   font-variant-numeric: tabular-nums; font-weight: 700; color: #f8fafc;
+   box-shadow: inset 0 -2px 0 rgba(0,0,0,0.35);
+   transition: transform 0.25s ease, opacity 0.25s ease;
+ }
+ .flip-panel.tick { animation: flipTick 0.35s ease; }
+ @keyframes flipTick {
+   0% { transform: rotateX(0deg); }
+   40% { transform: rotateX(-85deg); opacity: 0.6; }
+   100% { transform: rotateX(0deg); opacity: 1; }
+ }
+ .stat-pulse { transition: all 0.4s ease; }
+</style>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>[x-cloak]{display:none!important}</style>
+</head>
+<body class="font-sans antialiased text-white bg-ink-900 overflow-x-hidden">
+ <!-- Nav -->
+ <header class="fixed top-0 inset-x-0 z-50">
+ <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+ <a href="/" class="flex items-center gap-2.5">
+ <img src="/static/img/knowsoft-logo.png" alt="Knowsoft" class="h-10 w-auto object-contain drop-shadow-lg"
+ onerror="this.onerror=null;this.src='/static/img/knowsoft-icon.svg'">
+ <span class="font-semibold tracking-tight text-lg">Churchgate</span>
+ </a>
+ <div class="flex items-center gap-2 sm:gap-3 text-sm">
+ <a href="/auth/login" class="px-4 py-2 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition">Sign in</a>
+ <a href="/join" class="px-4 py-2.5 rounded-xl bg-sanctum-500 text-ink-900 font-semibold shadow-glow hover:bg-sanctum-400 transition">Join as Member</a>
+ </div>
+ </div>
+ </header>
+
+ <!-- Hero -->
+ <section class="hero-mesh relative min-h-screen flex items-center pt-16 overflow-hidden">
+ <div class="absolute inset-0 opacity-40 pointer-events-none">
+ <img src="/static/img/church-hero.svg" alt="" class="w-full h-full object-cover object-center church-stage max-w-none w-full h-full object-cover">
+ </div>
+ <div class="absolute inset-0 bg-gradient-to-r from-ink-900 via-ink-900/85 to-ink-900/40"></div>
+ <div class="absolute bottom-0 inset-x-0 h-40 bg-gradient-to-t from-ink-900 to-transparent"></div>
+
+ <div class="relative max-w-6xl mx-auto px-4 sm:px-6 py-16 sm:py-20 w-full grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-center">
+ <div>
+ <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full glass-card text-xs font-medium text-sanctum-400 mb-6">
+ <span class="w-1.5 h-1.5 rounded-full bg-sanctum-400 animate-pulse"></span>
+ Knowsoft · Ministry platform
+ </div>
+ <h1 class="font-display text-4xl sm:text-5xl lg:text-[3.25rem] leading-[1.15] font-bold tracking-tight mb-6">
+ One flock.<br>
+ <span class="text-sanctum-400">Every assembly visible.</span>
+ </h1>
+ <p class="text-lg text-slate-300 max-w-lg leading-relaxed mb-10">
+ Churchgate connects Global, Country, State, Group and District churches—
+ members, workers, attendance, and programs—in one secure house.
+ </p>
+ <div class="flex flex-col sm:flex-row flex-wrap gap-3">
+ <a href="/join" class="px-7 py-3.5 rounded-xl bg-sanctum-500 text-ink-900 font-bold shadow-lift hover:bg-sanctum-400 transition">
+ Register as Member
+ </a>
+ <a href="/auth/register-church" class="px-7 py-3.5 rounded-xl glass-card font-semibold hover:bg-white/10 transition">
+ Register Your Church
+ </a>
+ <a href="/auth/login" class="px-7 py-3.5 rounded-xl font-medium text-slate-300 hover:text-white transition">
+ Sign in →
+ </a>
+ </div>
+ <div class="mt-12 flex flex-wrap gap-6 text-sm text-slate-400">
+ <div><span class="text-2xl font-bold text-white block">5</span> Hierarchy levels</div>
+ <div><span class="text-2xl font-bold text-white block">Live</span> Stats & reports</div>
+ <div><span class="text-2xl font-bold text-white block">Secure</span> Member access</div>
+ </div>
+ </div>
+
+ 
+ <!-- Live clock + stats + YouTube showcase -->
+ 
+ <!-- Live YouTube showcase + stats + clock -->
+ <div class="space-y-4 mt-8 lg:mt-0" x-data="homeLive()" x-init="boot()">
+
+   <!-- Captivating video stage -->
+   <div class="relative rounded-3xl overflow-hidden border border-sanctum-500/30 shadow-glow"
+        style="background: radial-gradient(ellipse at 30% 20%, rgba(212,160,23,0.2), transparent 55%), linear-gradient(160deg,#0c1222,#1a2238 50%,#0f172a);">
+     <div class="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-sanctum-500/10 blur-2xl pointer-events-none"></div>
+     <div class="absolute -bottom-8 -left-8 w-32 h-32 rounded-full bg-sky-500/10 blur-2xl pointer-events-none"></div>
+
+     <div class="relative px-4 pt-4 pb-2 flex items-center justify-between gap-2">
+       <div class="flex items-center gap-2">
+         <span class="relative flex h-2.5 w-2.5">
+           <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"></span>
+           <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
+         </span>
+         <span class="text-[11px] font-bold uppercase tracking-widest text-red-400">Live</span>
+         <span class="text-[11px] text-slate-400 truncate" x-text="playlist.length ? (playlist[yi].church || 'Churchgate') : 'Showcase'"></span>
+       </div>
+       <span class="text-[10px] text-slate-500" x-show="playlist.length > 1" x-text="'Clip ' + (yi+1) + '/' + playlist.length"></span>
+     </div>
+
+     <div class="relative mx-3 mb-3 rounded-2xl overflow-hidden border border-white/10 bg-black aspect-video shadow-lift">
+       <!-- Live YouTube embed rotates every 30s -->
+       <template x-if="playlist.length && playlist[yi] && playlist[yi].video_id">
+         <div class="absolute inset-0" :key="yi + '-' + playlist[yi].video_id">
+           <iframe class="w-full h-full"
+                   :src="'https://www.youtube.com/embed/' + playlist[yi].video_id + '?autoplay=1&mute=1&controls=1&rel=0&modestbranding=1&playsinline=1'"
+                   :title="playlist[yi].title"
+                   allow="autoplay; encrypted-media; picture-in-picture"
+                   allowfullscreen></iframe>
+           <button type="button" @click="openYt(playlist[yi])"
+                   class="absolute bottom-3 right-3 z-10 px-3 py-1.5 rounded-full bg-white/95 text-ink-900 text-xs font-bold shadow hover:bg-white">
+             Enlarge
+           </button>
+         </div>
+       </template>
+       <!-- Fallback: home page style screenshot when nothing to show -->
+       <template x-if="!playlist.length">
+         <div class="absolute inset-0 flex flex-col">
+           <div class="flex-1 relative hero-mesh flex items-center justify-center p-4">
+             <img src="/static/img/church-hero.svg" alt="Churchgate" class="absolute inset-0 w-full h-full object-cover opacity-40">
+             <div class="relative text-center z-10 px-4">
+               <img src="/static/img/knowsoft-logo.png" alt="Knowsoft" class="h-12 mx-auto mb-3 object-contain drop-shadow-lg"
+                    onerror="this.style.display='none'">
+               <p class="font-display text-lg sm:text-xl font-bold text-white">Knowsoft Churchgate</p>
+               <p class="text-xs text-slate-300 mt-1">One flock · Every assembly visible</p>
+               <p class="text-[10px] text-slate-500 mt-3">Approved YouTube links will play here live</p>
+             </div>
+           </div>
+         </div>
+       </template>
+     </div>
+
+     <div class="px-4 pb-3">
+       <p class="text-sm font-semibold text-white truncate" x-text="playlist.length ? playlist[yi].title : 'Welcome to Churchgate'"></p>
+       <p class="text-[11px] text-slate-400" x-show="playlist.length">Auto-plays muted · rotates every 30s · tap Enlarge for sound</p>
+     </div>
+   </div>
+
+   <!-- Live time & date BELOW video -->
+   <div class="glass-card rounded-2xl p-4 shadow-lift">
+     <p class="text-sanctum-400 text-[10px] font-semibold uppercase tracking-wider mb-2">Live time & date</p>
+     <div class="flex items-center gap-1.5 text-2xl sm:text-3xl font-bold tracking-wider flip-unit">
+       <span class="flip-panel" x-text="hh" :class="tickH && 'tick'"></span>
+       <span class="text-sanctum-400">:</span>
+       <span class="flip-panel" x-text="mm" :class="tickM && 'tick'"></span>
+       <span class="text-sanctum-400">:</span>
+       <span class="flip-panel text-sanctum-400" x-text="ss" :class="tickS && 'tick'"></span>
+     </div>
+     <p class="mt-2 text-sm text-slate-300" x-text="dateStr"></p>
+   </div>
+
+   <!-- Running counters -->
+   <div class="glass-card rounded-2xl p-4 grid grid-cols-2 gap-3">
+     <div class="stat-pulse"><p class="text-[10px] uppercase text-slate-400">Churches</p><p class="text-xl font-bold text-white" x-text="fmt(display.churches)"></p></div>
+     <div class="stat-pulse"><p class="text-[10px] uppercase text-slate-400">Countries</p><p class="text-xl font-bold text-white" x-text="fmt(display.countries)"></p></div>
+     <div class="stat-pulse"><p class="text-[10px] uppercase text-slate-400">States</p><p class="text-xl font-bold text-white" x-text="fmt(display.states)"></p></div>
+     <div class="stat-pulse"><p class="text-[10px] uppercase text-slate-400">Members</p><p class="text-xl font-bold text-sanctum-400" x-text="fmt(display.members)"></p></div>
+   </div>
+
+   <!-- Enlarge lightbox -->
+   <div x-show="ytOpen" x-cloak class="fixed inset-0 z-[110] bg-black/90 flex items-center justify-center p-4"
+        @click.self="closeYt()" @keydown.escape.window="closeYt()">
+     <button type="button" @click="closeYt()" class="absolute top-4 right-4 text-white text-sm bg-white/10 px-3 py-1.5 rounded-lg">Close ✕</button>
+     <div class="w-full max-w-4xl aspect-video">
+       <iframe x-show="ytId" class="w-full h-full rounded-xl"
+               :src="ytId ? ('https://www.youtube.com/embed/' + ytId + '?autoplay=1&rel=0') : ''"
+               allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+     </div>
+   </div>
+ </div>
+
+ <!-- Featured Global special programs (approved by General Admin) — 20s each -->
+ {% if featured_programs %}
+ <section class="relative border-y border-white/10 bg-ink-800/80 overflow-hidden" x-data="homeShowcase()" x-init="start()">
+   <div class="max-w-6xl mx-auto px-4 sm:px-6 py-10 sm:py-14">
+     <div class="flex flex-wrap items-end justify-between gap-3 mb-6">
+       <div>
+         <p class="text-sanctum-400 text-xs font-semibold uppercase tracking-wider">Global special programs</p>
+         <h2 class="font-display text-2xl sm:text-3xl font-bold text-white mt-1">Coming up across the body</h2>
+       </div>
+       <p class="text-xs text-slate-400">Each highlight shows for 20 seconds</p>
+     </div>
+     <div class="relative min-h-[280px] sm:min-h-[320px]">
+       <template x-for="(item, i) in items" :key="i">
+         <div x-show="i === active" x-transition:enter="transition ease-out duration-700"
+              x-transition:enter-start="opacity-0 translate-y-3" x-transition:enter-end="opacity-100 translate-y-0"
+              x-transition:leave="transition ease-in duration-400" x-transition:leave-start="opacity-100"
+              x-transition:leave-end="opacity-0" class="absolute inset-0">
+           <div class="grid sm:grid-cols-2 gap-6 items-center glass-card rounded-3xl p-5 sm:p-8 border border-white/10 shadow-lift h-full">
+             <div class="order-2 sm:order-1">
+               <div class="flex items-center gap-3 mb-2">
+                 <template x-if="item.church_logo">
+                   <img :src="item.church_logo" alt="" class="h-12 w-12 object-contain rounded-lg bg-white/10 border border-white/20 p-1">
+                 </template>
+                 <p class="text-sanctum-400 text-sm font-semibold" x-text="item.church"></p>
+               </div>
+               <h3 class="text-xl sm:text-2xl font-bold text-white mb-3" x-text="item.title"></h3>
+               <p class="text-sm text-slate-300 mb-4" x-show="item.description" x-text="item.description"></p>
+               <div class="flex flex-wrap gap-4 text-sm text-slate-300">
+                 <span x-show="item.date">📅 <span x-text="item.date"></span></span>
+                 <span x-show="item.venue">📍 <span x-text="item.venue"></span></span>
+               </div>
+             </div>
+             <div class="order-1 sm:order-2">
+               <template x-if="item.video">
+                 <button type="button" @click="openMedia(item.video, 'video', item.title)"
+                         class="relative w-full group text-left">
+                   <video :src="item.video" muted playsinline class="w-full h-48 sm:h-56 object-cover rounded-2xl border border-white/10 bg-black pointer-events-none"></video>
+                   <span class="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/40 rounded-2xl transition">
+                     <span class="px-3 py-1.5 rounded-full bg-white/90 text-ink-900 text-xs font-bold">▶ Enlarge video</span>
+                   </span>
+                 </button>
+               </template>
+               <template x-if="!item.video && item.photo">
+                 <button type="button" @click="openMedia(item.photo, 'image', item.title)"
+                         class="relative w-full group text-left">
+                   <img :src="item.photo" :alt="item.title" class="w-full h-48 sm:h-56 object-cover rounded-2xl border border-white/10">
+                   <span class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/35 rounded-2xl transition">
+                     <span class="px-3 py-1.5 rounded-full bg-white/90 text-ink-900 text-xs font-bold">Enlarge photo</span>
+                   </span>
+                 </button>
+               </template>
+               <template x-if="!item.video && !item.photo">
+                 <div class="w-full h-48 sm:h-56 rounded-2xl bg-gradient-to-br from-ink-700 to-ink-900 border border-white/10 flex items-center justify-center">
+                   <span class="text-slate-500 text-sm">Program highlight</span>
+                 </div>
+               </template>
+             </div>
+           </div>
+         </div>
+       </template>
+     </div>
+
+     <!-- Enlarge lightbox -->
+     <div x-show="lightbox" x-cloak
+          class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/85"
+          @keydown.escape.window="closeMedia()"
+          @click.self="closeMedia()">
+       <button type="button" @click="closeMedia()"
+               class="absolute top-4 right-4 text-white text-sm font-semibold bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg">Close ✕</button>
+       <div class="max-w-5xl w-full max-h-[90vh] flex flex-col items-center gap-3">
+         <p class="text-white text-sm font-medium" x-text="lbTitle"></p>
+         <template x-if="lbType === 'video'">
+           <video :src="lbSrc" controls autoplay playsinline class="max-h-[80vh] w-full rounded-xl bg-black"></video>
+         </template>
+         <template x-if="lbType === 'image'">
+           <img :src="lbSrc" :alt="lbTitle" class="max-h-[80vh] w-auto max-w-full rounded-xl object-contain">
+         </template>
+       </div>
+     </div>
+
+     <div class="flex justify-center gap-2 mt-6" x-show="items.length > 1">
+       <template x-for="(item, i) in items" :key="'dot'+i">
+         <button type="button" @click="active = i; restart()"
+                 :class="i === active ? 'bg-sanctum-400' : 'bg-white/20'"
+                 class="w-2.5 h-2.5 rounded-full transition" :aria-label="'Slide '+(i+1)"></button>
+       </template>
+     </div>
+   </div>
+ </section>
+ <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+ <script>
+ window.homeShowcase = function homeShowcase() {
+   return {
+     active: 0,
+     timer: null,
+     items: {{ featured_programs|tojson }},
+     lightbox: false,
+     lbSrc: '',
+     lbType: 'image',
+     lbTitle: '',
+     openMedia(src, type, title) {
+       this.lbSrc = src;
+       this.lbType = type || 'image';
+       this.lbTitle = title || '';
+       this.lightbox = true;
+       if (this.timer) clearInterval(this.timer);
+     },
+     closeMedia() {
+       this.lightbox = false;
+       this.lbSrc = '';
+       this.restart();
+     },
+     start() {
+       if (!this.items || this.items.length < 2) return;
+       this.timer = setInterval(() => {
+         if (!this.lightbox) this.active = (this.active + 1) % this.items.length;
+       }, 20000);
+     },
+     restart() {
+       if (this.timer) clearInterval(this.timer);
+       this.start();
+     }
+   }
+ }
+ </script>
+ {% endif %}
+
+ 
+
+
+
+ <!-- Trust strip -->
+ <section class="border-y border-white/5 bg-ink-800/50">
+ <div class="max-w-6xl mx-auto px-4 py-8 flex flex-wrap justify-center gap-8 sm:gap-16 text-center text-sm text-slate-400">
+ <span>Attendance & finance</span>
+ <span class="text-white/20">|</span>
+ <span>Member directory</span>
+ <span class="text-white/20">|</span>
+ <span>PDF reports</span>
+ <span class="text-white/20">|</span>
+ <span>Multi-level sync</span>
+ </div>
+ </section>
+
+ <!-- How it works -->
+ <section class="max-w-6xl mx-auto px-4 sm:px-6 py-24">
+ <div class="text-center mb-14">
+ <p class="text-sanctum-400 text-sm font-semibold tracking-wide uppercase mb-2">How it works</p>
+ <h2 class="font-display text-3xl sm:text-4xl font-bold">Built for real church structure</h2>
+ </div>
+ <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+ {% set steps = [
+ ('01', 'Church registers', 'Global or branch assemblies apply with doctrine, pastor and codes.'),
+ ('02', 'Approval & tree', 'Each unit sits in the denomination tree. District holds primary data.'),
+ ('03', 'Members join', 'Believers select Global down to District and await pastoral approval.'),
+ ('04', 'Ministry lives here', 'Attendance,, programs and reports stay in one secure place.')
+ ] %}
+ {% for num, title, desc in [
+ ('01', 'Church registers', 'Global or branch assemblies apply with doctrine, pastor and codes.'),
+ ('02', 'Approval & tree', 'Each unit sits in the denomination tree. District holds primary data.'),
+ ('03', 'Members join', 'Believers select Global down to District and await pastoral approval.'),
+ ('04', 'Ministry lives here', 'Attendance,, programs and reports stay in one secure place.')
+ ] %}
+ <div class="rounded-2xl bg-ink-800 border border-white/5 p-6 hover:border-sanctum-500/40 transition">
+ <span class="text-sanctum-400 font-display text-2xl font-bold">{{ num }}</span>
+ <h3 class="font-semibold text-lg mt-3 mb-2">{{ title }}</h3>
+ <p class="text-sm text-slate-400 leading-relaxed">{{ desc }}</p>
+ </div>
+ {% endfor %}
+ </div>
+ </section>
+
+ <!-- CTA -->
+ <section class="max-w-6xl mx-auto px-4 sm:px-6 pb-24">
+ <div class="relative rounded-3xl overflow-hidden hero-mesh border border-white/10 p-10 sm:p-14 text-center shadow-lift">
+ <h2 class="font-display text-3xl sm:text-4xl font-bold mb-4">Ready to open the gate?</h2>
+ <p class="text-slate-300 max-w-xl mx-auto mb-8">Members and churches use one platform. Sign in when your account is approved.</p>
+ <div class="flex flex-wrap justify-center gap-4">
+ <a href="/auth/login" class="px-8 py-3.5 rounded-xl bg-sanctum-500 text-ink-900 font-bold hover:bg-sanctum-400 transition">Sign in</a>
+ <a href="/join" class="px-8 py-3.5 rounded-xl glass-card font-semibold hover:bg-white/10 transition">Join as Member</a>
+ <a href="/auth/register-church" class="px-8 py-3.5 rounded-xl glass-card font-semibold hover:bg-white/10 transition">Register Church</a>
+ </div>
+ </div>
+ </section>
+
+ <footer class="border-t border-white/5 py-10 text-center text-sm text-slate-500">
+ <img src="/static/img/knowsoft-logo.png" alt="Knowsoft" class="h-8 w-auto mx-auto mb-3 opacity-80 object-contain"
+ onerror="this.style.display='none'">
+ <p>© Knowsoft Churchgate · For the Body of Christ</p>
+ </footer>
+
+<script>
+window.homeLive = function homeLive() {
+  const base = {{ live_stats|default({'churches': 5, 'countries': 1, 'states': 1, 'members': 1})|tojson }};
+  const clips = {{ youtube_clips|default([])|tojson }};
+  return {
+    hh: "00", mm: "00", ss: "00",
+    dateStr: "",
+    tickH: false, tickM: false, tickS: false,
+    display: { churches: base.churches, countries: base.countries, states: base.states, members: base.members },
+    target: base,
+    playlist: clips,
+    yi: 0,
+    ytOpen: false,
+    ytId: "",
+    boot() {
+      this.tickClock();
+      setInterval(() => this.tickClock(), 1000);
+      setInterval(() => this.jitterStats(), 1800);
+      if (this.playlist.length > 1) {
+        setInterval(() => { this.yi = (this.yi + 1) % this.playlist.length; }, 30000);
+      }
+    },
+    pad(n) { return String(n).padStart(2, "0"); },
+    tickClock() {
+      const d = new Date();
+      const h = this.pad(d.getHours()), m = this.pad(d.getMinutes()), s = this.pad(d.getSeconds());
+      this.tickS = true;
+      if (m !== this.mm) { this.tickM = true; }
+      if (h !== this.hh) { this.tickH = true; }
+      this.ss = s; this.mm = m; this.hh = h;
+      this.dateStr = d.toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+      setTimeout(() => { this.tickS = false; this.tickM = false; this.tickH = false; }, 280);
+    },
+    jitterStats() {
+      // dramatic but returns toward real targets
+      const j = (t) => Math.max(1, Math.round(t * (0.85 + Math.random() * 0.45)));
+      this.display = {
+        churches: j(this.target.churches),
+        countries: j(this.target.countries),
+        states: j(this.target.states),
+        members: j(this.target.members),
+      };
+    },
+    fmt(n) { return (n || 0).toLocaleString(); },
+    openYt(item) { this.ytId = item.video_id; this.ytOpen = true; },
+    closeYt() { this.ytOpen = false; this.ytId = ""; },
+  };
+}
+</script>
+
+
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' })
+      .then(function (reg) { console.log('Churchgate SW ok', reg.scope); })
+      .catch(function (err) {
+        navigator.serviceWorker.register('/static/sw.js').catch(function(e){ console.warn(e); });
+      });
+  });
+}
+</script>
+
+</body>
+</html>

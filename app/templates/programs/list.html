@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Programs{% endblock %}
+{% block content %}
+<div class="max-w-3xl mx-auto px-4 py-8">
+  <div class="flex flex-wrap justify-between gap-3 mb-6">
+    <div>
+      <h1 class="text-2xl font-bold text-navy-900">Special programs</h1>
+      <p class="text-sm text-slate-500">Open a program to manage photos. Global admins can request home page display.</p>
+    </div>
+    {% set rv = user.role.value if user.role.value is defined else user.role %}
+    {% if rv in ['church_admin', 'general_admin', 'data_officer'] %}
+    <a href="/programs/create" class="px-4 py-2 rounded-xl bg-teal-600 text-white text-sm font-semibold">Create program</a>
+    {% endif %}
+  </div>
+  {% for p in programs %}
+  <a href="/programs/{{ p.id }}" class="block bg-white border rounded-2xl p-4 mb-3 hover:border-teal-300">
+    <div class="flex flex-wrap justify-between gap-2">
+      <p class="font-semibold">{{ p.title }}</p>
+      <div class="flex gap-2 text-xs">
+        {% if p.featured_on_home %}
+        <span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">On home page</span>
+        {% elif p.request_home_display %}
+        <span class="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">Home requested</span>
+        {% endif %}
+      </div>
+    </div>
+    <p class="text-xs text-slate-500 mt-1">{{ p.program_date or '' }} · {{ p.location or '' }} · Broadcast: {{ p.broadcast_to }}</p>
+  </a>
+  {% else %}
+  {% set empty_title = "No information to display" %}
+  {% set empty_message = "No special programs yet. Church admin can create one." %}
+  {% set back_url = "/dashboard" %}
+  {% include "partials/empty_state.html" %}
+  {% endfor %}
+</div>
+{% endblock %}

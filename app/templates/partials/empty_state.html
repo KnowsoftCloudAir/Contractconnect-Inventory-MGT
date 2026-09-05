@@ -1,0 +1,30 @@
+{# Usage: {% include "partials/empty_state.html" with context %} or set message/back_url before include #}
+<div class="relative min-h-[60vh] rounded-3xl overflow-hidden border border-slate-200 shadow-sm">
+  <div class="absolute inset-0 bg-gradient-to-br from-slate-900 via-navy-900 to-slate-800"></div>
+  <div class="absolute inset-0 opacity-30 flex items-center justify-center pointer-events-none">
+    <svg viewBox="0 0 420 380" class="w-full max-w-lg h-auto" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <defs>
+        <linearGradient id="esStone" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#e2e8f0"/><stop offset="100%" stop-color="#94a3b8"/></linearGradient>
+        <linearGradient id="esRoof" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#1e3a5f"/><stop offset="100%" stop-color="#0f172a"/></linearGradient>
+        <linearGradient id="esGold" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#f5d76e"/><stop offset="100%" stop-color="#b8860b"/></linearGradient>
+      </defs>
+      <ellipse cx="210" cy="350" rx="180" ry="18" fill="#0a1628" opacity="0.8"/>
+      <rect x="110" y="180" width="200" height="160" rx="4" fill="url(#esStone)"/>
+      <polygon points="95,185 210,95 325,185" fill="url(#esRoof)"/>
+      <rect x="180" y="70" width="60" height="120" fill="url(#esStone)"/>
+      <polygon points="170,75 210,30 250,75" fill="url(#esRoof)"/>
+      <rect x="204" y="8" width="12" height="48" rx="2" fill="url(#esGold)"/>
+      <rect x="190" y="18" width="40" height="12" rx="2" fill="url(#esGold)"/>
+      <path d="M185 280 L185 340 L235 340 L235 280 Q210 255 185 280 Z" fill="#0f172a"/>
+    </svg>
+  </div>
+  <div class="relative z-10 flex flex-col items-center justify-center text-center px-6 py-20">
+    <p class="text-xs uppercase tracking-widest text-amber-300/90 font-semibold mb-2">Churchgate</p>
+    <h2 class="text-2xl sm:text-3xl font-bold text-white mb-3">{{ empty_title|default("No information to display") }}</h2>
+    <p class="text-sm text-slate-300 max-w-md mb-8">{{ empty_message|default("There is nothing here yet. Check back later or return to the previous page.") }}</p>
+    <a href="{{ back_url|default('javascript:history.back()') }}"
+       class="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-amber-400 text-slate-900 font-bold text-sm shadow-lg hover:bg-amber-300 transition">
+      ← {{ back_label|default("Go back") }}
+    </a>
+  </div>
+</div>

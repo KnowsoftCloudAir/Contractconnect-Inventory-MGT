@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Pending Approval{% endblock %}
+{% block content %}
+<div class="min-h-screen flex items-center justify-center bg-navy-950 px-4">
+  <div class="max-w-md bg-white rounded-2xl p-8 text-center">
+    <div class="text-5xl mb-4">⏳</div>
+    <h1 class="text-xl font-bold mb-2">Registration Submitted</h1>
+    <p class="text-sm text-slate-600 mb-2"><strong>{{ church_name }}</strong></p>
+    <p class="text-sm text-slate-500 mb-4">Your temporary code: <code class="bg-slate-100 px-2 py-0.5 rounded">{{ code }}</code></p>
+    <p class="text-sm text-slate-600">Knowsoft Admin will review and send approval details and login instructions to <strong>{{ email }}</strong>.</p>
+    <a href="/auth/login" class="inline-block mt-6 px-6 py-2.5 rounded-xl bg-teal-500 text-white font-medium">Back to Sign In</a>
+  </div>
+</div>
+{% endblock %}

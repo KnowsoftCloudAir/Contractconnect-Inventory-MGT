@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="max-w-md mx-auto px-4 py-20 text-center">
+  <div class="text-5xl mb-4">⏳</div>
+  <h1 class="text-xl font-bold mb-2">Registration received</h1>
+  <p class="text-sm text-slate-600">Thank you, <strong>{{ full_name }}</strong>. Your district admin will approve your membership. You can sign in after approval with <strong>{{ email }}</strong>.</p>
+  <a href="/auth/login" class="inline-block mt-6 px-6 py-2.5 rounded-xl bg-teal-500 text-white">Sign in</a>
+</div>
+{% endblock %}

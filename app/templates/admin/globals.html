@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Global Churches{% endblock %}
+{% block content %}
+<div class="max-w-5xl mx-auto px-4 py-8">
+  <div class="flex flex-wrap justify-between gap-3 mb-6">
+    <div>
+      <h1 class="text-2xl font-bold text-navy-900">Global churches</h1>
+      <p class="text-sm text-slate-500">Approve, deactivate, or open any global dashboard</p>
+    </div>
+    <a href="/admin/" class="text-sm text-blue-700 font-medium">← Admin home</a>
+  </div>
+  <div class="space-y-4">
+    {% for g in globals %}
+    <div class="bg-white rounded-2xl border p-5 shadow-sm flex flex-wrap justify-between gap-4">
+      <div>
+        <p class="font-semibold text-lg">{{ g.name }}</p>
+        <p class="text-xs text-slate-500 mt-1">
+          <code class="bg-slate-100 px-1 rounded">{{ g.code }}</code>
+          · <span class="capitalize">{{ g.approval_status }}</span>
+          · {{ g.resident_pastor or "" }}
+        </p>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <a href="/admin/churches/{{ g.id }}/dashboard" class="px-3 py-1.5 rounded-lg bg-blue-700 text-white text-xs font-semibold">View dashboard</a>
+        <a href="/admin/churches/{{ g.id }}" class="px-3 py-1.5 rounded-lg border text-xs">Edit</a>
+        {% if g.approval_status != 'approved' %}
+        <form method="post" action="/admin/churches/{{ g.id }}/approve"><button class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs">Approve</button></form>
+        {% endif %}
+        <form method="post" action="/admin/churches/{{ g.id }}/disapprove" onsubmit="return confirm('Deactivate this Global and ALL branches?')">
+          <button class="px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-semibold">Deactivate</button>
+        </form>
+      </div>
+    </div>
+    {% else %}
+    <p class="text-slate-500">No global churches yet.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

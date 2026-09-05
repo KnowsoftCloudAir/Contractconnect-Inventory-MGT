@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Secure access</title>
+  <link rel="icon" href="/static/img/knowsoft-logo.png" type="image/png">
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-slate-200 flex items-center justify-center px-4">
+  <div class="w-full max-w-sm bg-white rounded-xl shadow border border-slate-200 p-8">
+    <h1 class="text-lg font-semibold text-slate-800 mb-6">Authorized access</h1>
+    {% if error %}<div class="mb-4 text-sm text-red-600">{{ error }}</div>{% endif %}
+    <form method="post" action="/ks-admin/login" class="space-y-4">
+      <input type="email" name="email" required placeholder="Email" class="w-full px-3 py-2.5 border rounded-lg text-sm">
+      <input type="password" name="password" required placeholder="Password" class="w-full px-3 py-2.5 border rounded-lg text-sm">
+      <button class="w-full py-2.5 rounded-lg bg-slate-800 text-white text-sm font-medium">Continue</button>
+    </form>
+  </div>
+</body>
+</html>

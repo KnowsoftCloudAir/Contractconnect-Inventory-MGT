@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}My subscription{% endblock %}
+{% block content %}
+<div class="max-w-3xl mx-auto px-4 py-8">
+  <h1 class="text-2xl font-bold text-navy-900 mb-1">Membership subscription</h1>
+  <p class="text-sm text-slate-500 mb-6">Pay monthly, annually, or a custom period. After transfer, submit your request — General Admin confirms and your status turns active.</p>
+
+  {% if sample and sample.show_warning %}
+  <div class="mb-6 rounded-2xl border-2 border-amber-400 bg-amber-50 p-4 text-amber-950 shadow">
+    <p class="font-semibold">{{ sample.message }}</p>
+    <a href="/join" class="inline-block mt-2 text-sm font-bold text-amber-800 underline">Register as a full member →</a>
+  </div>
+  {% endif %}
+
+  {% if active %}
+  <div class="mb-8 rounded-2xl border-2 border-emerald-400 bg-gradient-to-br from-emerald-50 to-teal-50 p-6 shadow-lg text-center">
+    <p class="text-xs font-bold uppercase tracking-wider text-emerald-700 mb-1">Subscription active</p>
+    <p class="text-3xl font-bold text-emerald-800">✓ Paid & confirmed</p>
+    <p class="text-sm text-emerald-900 mt-2">{{ active.plan|capitalize }} · {{ active.currency }} {{ "%.2f"|format(active.amount) }}</p>
+    <p class="text-xs text-emerald-700 mt-1">Valid until {{ active.ends_at }} UTC</p>
+    <p class="text-xs text-emerald-600 mt-2">Ref: {{ active.payment_reference }}</p>
+  </div>
+  {% endif %}
+
+  <section class="bg-white border rounded-2xl p-6 mb-8 shadow-sm">
+    <h2 class="font-semibold text-lg mb-2">{{ settings.title }}</h2>
+    {% if settings.instructions %}<p class="text-sm text-slate-600 mb-4 whitespace-pre-wrap">{{ settings.instructions }}</p>{% endif %}
+    <div class="grid sm:grid-cols-2 gap-3 text-sm mb-4">
+      <div class="bg-slate-50 rounded-xl p-3 border"><p class="text-xs text-slate-500">Bank</p><p class="font-semibold">{{ settings.bank_name or "—" }}</p></div>
+      <div class="bg-slate-50 rounded-xl p-3 border"><p class="text-xs text-slate-500">Account name</p><p class="font-semibold">{{ settings.account_name or "—" }}</p></div>
+      <div class="bg-slate-50 rounded-xl p-3 border"><p class="text-xs text-slate-500">Account number</p><p class="font-semibold tracking-wide">{{ settings.account_number or "—" }}</p></div>
+      <div class="bg-slate-50 rounded-xl p-3 border">
+        <p class="text-xs text-slate-500">Prices</p>
+        <p class="font-semibold">Monthly: {{ settings.currency }} {{ "%.2f"|format(settings.monthly_price) }}</p>
+        <p class="font-semibold">Annual: {{ settings.currency }} {{ "%.2f"|format(settings.annual_price) }}</p>
+      </div>
+    </div>
+    {% if settings.other_details %}<p class="text-sm text-slate-600 whitespace-pre-wrap">{{ settings.other_details }}</p>{% endif %}
+  </section>
+
+  <form method="post" action="/member/subscription/request" class="bg-slate-50 border rounded-2xl p-5 mb-8 space-y-3">
+    <h2 class="font-semibold">Submit payment for confirmation</h2>
+    <select name="plan" id="plan" class="w-full px-3 py-2 rounded-xl border" onchange="document.getElementById('customDays').classList.toggle('hidden', this.value!=='custom')">
+      <option value="monthly">Monthly ({{ settings.currency }} {{ "%.2f"|format(settings.monthly_price) }} · 30 days)</option>
+      <option value="annual">Annual ({{ settings.currency }} {{ "%.2f"|format(settings.annual_price) }} · 365 days)</option>
+      <option value="custom">Custom duration</option>
+    </select>
+    <div id="customDays" class="hidden">
+      <label class="text-xs text-slate-600">Number of days (min {{ settings.custom_min_days }})</label>
+      <input type="number" name="custom_days" min="{{ settings.custom_min_days }}" value="30" class="w-full px-3 py-2 rounded-xl border">
+    </div>
+    <input name="payment_reference" placeholder="Bank transfer reference / narration" class="w-full px-3 py-2 rounded-xl border">
+    <button class="w-full py-3 rounded-xl bg-emerald-600 text-white font-semibold">I have paid — request confirmation</button>
+  </form>
+
+  <h2 class="font-semibold mb-3">Your history</h2>
+  <div class="space-y-3">
+    {% for s in subs %}
+    <div class="border rounded-xl p-4 bg-white {% if s.status=='active' %}border-emerald-300{% elif s.status=='pending' %}border-amber-200{% endif %}">
+      <div class="flex justify-between text-sm">
+        <span class="font-semibold">{{ s.plan }} · {{ s.currency }} {{ "%.2f"|format(s.amount) }}</span>
+        <span class="text-xs uppercase {% if s.status=='active' %}text-emerald-700{% elif s.status=='pending' %}text-amber-700{% else %}text-slate-500{% endif %}">{{ s.status }}</span>
+      </div>
+      <p class="text-xs text-slate-500 mt-1">{{ s.duration_days }} days · Ref {{ s.payment_reference or "—" }} · {{ s.created_at }}</p>
+      {% if s.ends_at %}<p class="text-xs text-slate-500">Ends {{ s.ends_at }}</p>{% endif %}
+    </div>
+    {% else %}
+    <p class="text-sm text-slate-400">No subscription requests yet.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Enter Weekly Stats{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto px-4 py-8">
+  <h1 class="text-xl font-bold mb-2">Weekly Statistics</h1>
+  <p class="text-sm text-slate-500 mb-6">{{ church.name }} · District is the primary data unit</p>
+  <form method="post" action="/district/stats/enter" class="bg-white rounded-2xl border p-6 space-y-5">
+    <div>
+      <label class="text-sm font-medium">Week starting (Monday)</label>
+      <input type="date" name="week_start" value="{{ week_start }}" required class="w-full mt-1 px-4 py-3 rounded-xl border">
+    </div>
+    <div>
+      <p class="text-sm font-semibold text-navy-800 mb-2">Attendance</p>
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <div><label class="text-xs text-slate-500">Adult Male</label><input type="number" name="adult_male" value="0" min="0" class="w-full px-3 py-2 rounded-lg border"></div>
+        <div><label class="text-xs text-slate-500">Adult Female</label><input type="number" name="adult_female" value="0" min="0" class="w-full px-3 py-2 rounded-lg border"></div>
+        <div><label class="text-xs text-slate-500">Children Boys</label><input type="number" name="children_boys" value="0" min="0" class="w-full px-3 py-2 rounded-lg border"></div>
+        <div><label class="text-xs text-slate-500">Children Girls</label><input type="number" name="children_girls" value="0" min="0" class="w-full px-3 py-2 rounded-lg border"></div>
+        <div><label class="text-xs text-slate-500">Youth Male</label><input type="number" name="youth_male" value="0" min="0" class="w-full px-3 py-2 rounded-lg border"></div>
+        <div><label class="text-xs text-slate-500">Youth Female</label><input type="number" name="youth_female" value="0" min="0" class="w-full px-3 py-2 rounded-lg border"></div>
+      </div>
+    </div>
+    <div>
+      <p class="text-sm font-semibold text-navy-800 mb-2">Finance</p>
+      <div class="grid grid-cols-3 gap-3">
+        <div><label class="text-xs text-slate-500">Offering</label><input type="number" step="0.01" name="offering" value="0" class="w-full px-3 py-2 rounded-lg border"></div>
+        <div><label class="text-xs text-slate-500">Tithe</label><input type="number" step="0.01" name="tithe" value="0" class="w-full px-3 py-2 rounded-lg border"></div>
+        <div><label class="text-xs text-slate-500">Donation</label><input type="number" step="0.01" name="donation" value="0" class="w-full px-3 py-2 rounded-lg border"></div>
+      </div>
+    </div>
+    <div>
+      <p class="text-sm font-semibold text-navy-800 mb-2">Growth & Care</p>
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <div><label class="text-xs text-slate-500">Special program att.</label><input type="number" name="special_program_attendance" value="0" min="0" class="w-full px-3 py-2 rounded-lg border"></div>
+        <div><label class="text-xs text-slate-500">Newcomers</label><input type="number" name="newcomers" value="0" min="0" class="w-full px-3 py-2 rounded-lg border"></div>
+        <div><label class="text-xs text-slate-500">Converts</label><input type="number" name="converts" value="0" min="0" class="w-full px-3 py-2 rounded-lg border"></div>
+        <div><label class="text-xs text-slate-500">Counseling</label><input type="number" name="counseling" value="0" min="0" class="w-full px-3 py-2 rounded-lg border"></div>
+        <div><label class="text-xs text-slate-500">Members in need</label><input type="number" name="members_in_need" value="0" min="0" class="w-full px-3 py-2 rounded-lg border"></div>
+      </div>
+    </div>
+    <textarea name="notes" rows="2" placeholder="Notes" class="w-full px-4 py-3 rounded-xl border"></textarea>
+    <button class="w-full py-3 rounded-xl bg-teal-500 text-white font-semibold">Save Week</button>
+  </form>
+</div>
+{% endblock %}

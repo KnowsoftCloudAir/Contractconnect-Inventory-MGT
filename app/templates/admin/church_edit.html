@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ church.name }} – Admin{% endblock %}
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-8">
+  <a href="/admin/" class="text-sm text-teal-600 hover:underline">← All churches</a>
+  <h1 class="text-2xl font-bold mt-2 mb-6">{{ church.name }}</h1>
+
+  <form method="post" action="/admin/churches/{{ church.id }}/edit" class="bg-white rounded-2xl border p-6 space-y-4 mb-8">
+    <div class="grid sm:grid-cols-2 gap-4">
+      <div>
+        <label class="text-sm font-medium">Name</label>
+        <input name="name" value="{{ church.name }}" required class="w-full mt-1 px-3 py-2 rounded-xl border">
+      </div>
+      <div>
+        <label class="text-sm font-medium">Code</label>
+        <input value="{{ church.code }}" disabled class="w-full mt-1 px-3 py-2 rounded-xl border bg-slate-50">
+      </div>
+      <div>
+        <label class="text-sm font-medium">Resident pastor</label>
+        <input name="resident_pastor" value="{{ church.resident_pastor or '' }}" class="w-full mt-1 px-3 py-2 rounded-xl border">
+      </div>
+      <div>
+        <label class="text-sm font-medium">Phone</label>
+        <input name="phone" value="{{ church.phone or '' }}" class="w-full mt-1 px-3 py-2 rounded-xl border">
+      </div>
+      <div>
+        <label class="text-sm font-medium">Email</label>
+        <input name="email" value="{{ church.email or '' }}" class="w-full mt-1 px-3 py-2 rounded-xl border">
+      </div>
+      <div>
+        <label class="text-sm font-medium">Activity days</label>
+        <input name="activity_days" value="{{ church.activity_days or '' }}" class="w-full mt-1 px-3 py-2 rounded-xl border">
+      </div>
+    </div>
+    <div>
+      <label class="text-sm font-medium">Address</label>
+      <input name="address" value="{{ church.address or '' }}" class="w-full mt-1 px-3 py-2 rounded-xl border">
+    </div>
+    <div>
+      <label class="text-sm font-medium">Doctrine</label>
+      <textarea name="doctrine" rows="2" class="w-full mt-1 px-3 py-2 rounded-xl border">{{ church.doctrine or '' }}</textarea>
+    </div>
+    <div class="flex flex-wrap gap-4 items-center">
+      <div>
+        <label class="text-sm font-medium">Approval</label>
+        <select name="approval_status" class="block mt-1 px-3 py-2 rounded-xl border">
+          <option value="approved" {% if church.approval_status=='approved' %}selected{% endif %}>Approved</option>
+          <option value="pending" {% if church.approval_status=='pending' %}selected{% endif %}>Pending</option>
+          <option value="rejected" {% if church.approval_status=='rejected' %}selected{% endif %}>Rejected</option>
+        </select>
+      </div>
+      <div>
+        <label class="text-sm font-medium">Active</label>
+        <select name="is_active" class="block mt-1 px-3 py-2 rounded-xl border">
+          <option value="yes" {% if church.is_active %}selected{% endif %}>Yes</option>
+          <option value="no" {% if not church.is_active %}selected{% endif %}>No</option>
+        </select>
+      </div>
+    </div>
+    <button class="px-6 py-2.5 rounded-xl bg-navy-900 text-white font-semibold">Save church data</button>
+  </form>
+
+  <div class="grid sm:grid-cols-2 gap-6">
+    <div class="bg-white rounded-2xl border p-5">
+      <h2 class="font-semibold mb-3">Linked admins ({{ admins|length }})</h2>
+      <ul class="text-sm space-y-1">
+        {% for a in admins %}
+        <li>{{ a.full_name }} · {{ a.email }} · create={{ a.can_create_churches }} · approve={{ a.can_approve_members }}</li>
+        {% else %}<li class="text-slate-400">None</li>{% endfor %}
+      </ul>
+    </div>
+    <div class="bg-white rounded-2xl border p-5">
+      <h2 class="font-semibold mb-3">Child units ({{ children|length }})</h2>
+      <ul class="text-sm space-y-1">
+        {% for ch in children %}
+        <li><a href="/admin/churches/{{ ch.id }}" class="text-teal-600 hover:underline">{{ ch.name }}</a> ({{ ch.code }})</li>
+        {% else %}<li class="text-slate-400">None</li>{% endfor %}
+      </ul>
+    </div>
+  </div>
+  <div class="mt-6 bg-white rounded-2xl border p-5">
+    <h2 class="font-semibold mb-3">Members sample ({{ members|length }})</h2>
+    <p class="text-xs text-slate-500 mb-2">First 100 at this unit</p>
+    <ul class="text-sm max-h-48 overflow-y-auto">
+      {% for m in members %}<li>{{ m.full_name }} · {{ m.status }} · {{ m.approval_status }}</li>
+      {% else %}<li class="text-slate-400">No members</li>{% endfor %}
+    </ul>
+  </div>
+</div>
+{% endblock %}

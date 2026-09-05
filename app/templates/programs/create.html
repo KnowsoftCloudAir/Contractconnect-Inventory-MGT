@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Create Program{% endblock %}
+{% block content %}
+<div class="max-w-lg mx-auto px-4 py-8">
+  <h1 class="text-xl font-bold mb-6">Create special program</h1>
+  <form method="post" action="/programs/create" class="bg-white border rounded-2xl p-6 space-y-3">
+    <input name="title" required placeholder="Title *" class="w-full px-3 py-2 rounded-xl border">
+    <textarea name="description" rows="3" placeholder="Description" class="w-full px-3 py-2 rounded-xl border"></textarea>
+    <input type="date" name="program_date" class="w-full px-3 py-2 rounded-xl border">
+    <input name="location" placeholder="Location" class="w-full px-3 py-2 rounded-xl border">
+    <select name="broadcast_to" class="w-full px-3 py-2 rounded-xl border">
+      <option value="district">District only</option>
+      <option value="group">Group</option>
+      <option value="state">State</option>
+      <option value="country">Country</option>
+      <option value="global">Global</option>
+    </select>
+    <label class="flex items-start gap-2 text-sm bg-indigo-50 border border-indigo-100 rounded-xl p-3">
+      <input type="checkbox" name="request_home_display" value="yes" class="mt-1">
+      <span><strong>Request display on public home page</strong><br>
+      <span class="text-xs text-slate-600">Global church only. General Admin must approve and choose how long (up to 24 hours). Leave unchecked to keep this program on church pages only.</span></span>
+    </label>
+    <p class="text-xs text-slate-500">After you create the program, open it to upload <strong>photos and videos</strong>.</p>
+    <button class="w-full py-3 rounded-xl bg-teal-500 text-white font-semibold">Create & broadcast</button>
+  </form>
+</div>
+{% endblock %}

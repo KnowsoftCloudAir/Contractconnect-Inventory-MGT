@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}YouTube approvals{% endblock %}
+{% block content %}
+<div class="max-w-3xl mx-auto px-4 py-8">
+  <a href="/admin/" class="text-sm text-blue-700">← Admin</a>
+  <h1 class="text-2xl font-bold mt-2 mb-1">YouTube on home page</h1>
+  <p class="text-sm text-slate-500 mb-6">Approve Global church links. Add your own platform video (auto-approved).</p>
+  <form method="post" action="/youtube/submit" class="bg-white border rounded-2xl p-5 space-y-3 mb-8">
+    <p class="text-sm font-semibold">General Admin / platform video</p>
+    <input name="title" placeholder="Title" value="Knowsoft Churchgate" class="w-full px-3 py-2 rounded-xl border">
+    <input name="youtube_url" required placeholder="YouTube URL *" class="w-full px-3 py-2 rounded-xl border">
+    <button class="px-5 py-2.5 rounded-xl bg-red-600 text-white font-semibold">Publish</button>
+  </form>
+  <div class="space-y-3">
+    {% for row in rows %}
+    <div class="bg-white border rounded-xl p-4 flex flex-wrap justify-between gap-3">
+      <div>
+        <p class="font-semibold">{{ row.L.title }}</p>
+        <p class="text-xs text-slate-500">{{ row.church.name if row.church else "General Admin" }} · {{ row.L.youtube_url }}</p>
+        <p class="text-xs mt-1">{{ "Approved" if row.L.is_approved else "Pending" }}</p>
+      </div>
+      <div class="flex gap-2">
+        {% if not row.L.is_approved and row.L.is_active %}
+        <form method="post" action="/youtube/{{ row.L.id }}/approve"><button class="text-xs px-3 py-1.5 rounded-lg bg-emerald-600 text-white">Approve</button></form>
+        <form method="post" action="/youtube/{{ row.L.id }}/reject"><button class="text-xs px-3 py-1.5 rounded-lg border">Reject</button></form>
+        {% endif %}
+        <form method="post" action="/youtube/{{ row.L.id }}/delete"><button class="text-xs text-red-600">Delete</button></form>
+      </div>
+    </div>
+    {% else %}
+    <p class="text-slate-400 text-sm">No links.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

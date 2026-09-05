@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Messages{% endblock %}
+{% block content %}
+<div class="max-w-3xl mx-auto px-4 py-8">
+  <h1 class="text-2xl font-bold text-navy-900 mb-1">Messages</h1>
+  <p class="text-sm text-slate-500 mb-6">Talk with your district admin / pastor. Broadcast is only for staff or approved members.</p>
+
+  <form method="post" action="/messages/send" class="bg-white border rounded-2xl p-5 mb-8 space-y-3 shadow-sm">
+    <h2 class="font-semibold">New message</h2>
+    <input name="subject" placeholder="Subject (optional)" class="w-full px-3 py-2 rounded-xl border text-sm">
+    <textarea name="body" required rows="3" placeholder="Your message *" class="w-full px-3 py-2 rounded-xl border text-sm"></textarea>
+
+    {% if is_admin or can_broadcast %}
+    <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="broadcast" value="yes" id="bc" onchange="document.getElementById('bcOpts').classList.toggle('hidden', !this.checked)"> Broadcast to members</label>
+    <div id="bcOpts" class="hidden space-y-2 border rounded-xl p-3 bg-slate-50">
+      <p class="text-xs text-slate-500">Leave recipients empty for <strong>all</strong> approved members, or select specific people:</p>
+      <select name="recipient_ids" multiple class="w-full h-32 px-2 py-1 rounded-lg border text-sm">
+        {% for mu in member_users %}
+        <option value="{{ mu.user.id }}">{{ mu.member.full_name }} ({{ mu.user.email }})</option>
+        {% endfor %}
+      </select>
+      <p class="text-[10px] text-slate-400">Hold Ctrl/Cmd to select multiple</p>
+    </div>
+    {% else %}
+    <div>
+      <label class="text-xs font-semibold text-slate-600">Send to</label>
+      <select name="to_role" class="w-full mt-1 px-3 py-2 rounded-xl border text-sm">
+        <option value="admin">District admin</option>
+        <option value="pastor">District pastor</option>
+      </select>
+    </div>
+    {% endif %}
+    <button class="w-full py-2.5 rounded-xl bg-blue-700 text-white font-semibold">Send</button>
+  </form>
+
+  <h2 class="font-semibold mb-3">Inbox</h2>
+  <div class="space-y-3">
+    {% for row in rows %}
+    <div class="bg-white border rounded-2xl p-4">
+      <div class="flex flex-wrap justify-between gap-2 text-xs text-slate-500 mb-1">
+        <span>{{ row.sender.full_name if row.sender else "User" }} · {{ row.m.created_at }}</span>
+        {% if row.m.is_broadcast %}<span class="text-amber-700 font-semibold">Broadcast</span>{% endif %}
+      </div>
+      {% if row.m.subject %}<p class="font-semibold text-sm">{{ row.m.subject }}</p>{% endif %}
+      <p class="text-sm text-slate-700 whitespace-pre-wrap">{{ row.m.body }}</p>
+    </div>
+    {% else %}
+    <p class="text-sm text-slate-400 text-center py-8 border border-dashed rounded-2xl">No messages yet.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Data export / import{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto px-4 py-8">
+  <h1 class="text-2xl font-bold mb-1">Church data tools</h1>
+  <p class="text-sm text-slate-500 mb-6">Download Excel-compatible CSV for your Global network. Upload members CSV when needed.</p>
+  {% if request.query_params.get('imported') %}
+  <p class="mb-4 text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2">Imported {{ request.query_params.get('imported') }} member row(s).</p>
+  {% endif %}
+  <div class="space-y-4">
+    <a href="/data-tools/export/members.csv" class="block bg-white border rounded-2xl p-5 hover:border-teal-400">
+      <p class="font-semibold">Download members (CSV)</p>
+      <p class="text-xs text-slate-500">Name, contacts, district, group, state, country, status…</p>
+    </a>
+    <a href="/data-tools/export/stats.csv" class="block bg-white border rounded-2xl p-5 hover:border-teal-400">
+      <p class="font-semibold">Download weekly stats — tithe & offerings (CSV)</p>
+      <p class="text-xs text-slate-500">Attendance, tithe, offering, donation by week and church unit.</p>
+    </a>
+    <form method="post" action="/data-tools/import/members" enctype="multipart/form-data" class="bg-slate-50 border rounded-2xl p-5 space-y-3">
+      <p class="font-semibold">Upload members CSV</p>
+      <p class="text-xs text-slate-500">Columns like full_name, email, phone, sex, age_category, status…</p>
+      <input type="file" name="file" accept=".csv,text/csv" required class="text-sm">
+      <button class="px-4 py-2 rounded-xl bg-navy-900 text-white text-sm font-semibold">Import</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Members – Churchgate{% endblock %}
+{% block content %}
+<div class="max-w-5xl mx-auto px-4 py-8">
+  <div class="flex flex-wrap justify-between items-center gap-4 mb-6">
+    <div>
+      <h1 class="text-2xl font-bold text-navy-900">Members</h1>
+      <p class="text-sm text-slate-600 mt-1">{{ church.name if church else "" }} · <strong>{{ members|length }}</strong> in this unit and sub-churches</p>
+    </div>
+    <a href="/district/members/add" class="px-4 py-2.5 rounded-xl bg-blue-700 text-white text-sm font-semibold shadow">Add member</a>
+  </div>
+  <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
+    <table class="w-full text-sm min-w-[720px]">
+      <thead class="bg-blue-50 text-left text-slate-700">
+        <tr>
+          <th class="p-3 font-semibold">Name</th>
+          <th class="p-3 font-semibold">Status</th>
+          <th class="p-3 font-semibold">Title / role</th>
+          <th class="p-3 font-semibold">Contact</th>
+          <th class="p-3 font-semibold">Approval</th>
+          <th class="p-3 font-semibold">Edit</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in members %}
+        <tr class="border-t border-slate-100 hover:bg-slate-50/80 align-top">
+          <td class="p-3 font-medium text-navy-900">{{ m.full_name }}</td>
+          <td class="p-3 capitalize">{{ m.status }}</td>
+          <td class="p-3 text-slate-600">{{ m.custom_title or m.worker_type or m.leader_type or "—" }}</td>
+          <td class="p-3 text-slate-600">{{ m.whatsapp or m.phone or m.email or "—" }}</td>
+          <td class="p-3 capitalize text-xs">{{ m.approval_status }}</td>
+          <td class="p-3">
+            {% if m.approval_status == 'approved' %}
+            <details class="text-xs">
+              <summary class="cursor-pointer text-blue-700 font-semibold">Change status</summary>
+              <form method="post" action="/district/members/{{ m.id }}/status" class="mt-2 space-y-1 p-2 bg-slate-50 rounded-lg border">
+                <select name="status" class="w-full border rounded px-1 py-1">
+                  <option value="member" {% if m.status=='member' %}selected{% endif %}>Member</option>
+                  <option value="worker" {% if m.status=='worker' %}selected{% endif %}>Worker</option>
+                  <option value="leader" {% if m.status=='leader' %}selected{% endif %}>Leader</option>
+                  <option value="pastor" {% if m.status=='pastor' %}selected{% endif %}>Pastor</option>
+                </select>
+                <input name="worker_type" value="{{ m.worker_type or '' }}" placeholder="Worker type" class="w-full border rounded px-1 py-1">
+                <input name="leader_type" value="{{ m.leader_type or '' }}" placeholder="Leader type" class="w-full border rounded px-1 py-1">
+                <input name="custom_title" value="{{ m.custom_title or '' }}" placeholder="Custom title" class="w-full border rounded px-1 py-1">
+                <label class="flex items-center gap-1"><input type="checkbox" name="can_enter_stats" value="yes"> Can enter attendance</label>
+
+                <label class="flex items-center gap-1"><input type="checkbox" name="can_see_member_count" value="yes"> Can see member count</label>
+                <button class="w-full py-1 rounded bg-blue-700 text-white font-medium">Save</button>
+              </form>
+            </details>
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="6" class="p-10 text-center text-slate-500">
+            No members listed yet. Sample data is under Allen Avenue District
+            (<code class="text-xs bg-slate-100 px-1 rounded">allen@knowsoftchurch.org</code>).
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
