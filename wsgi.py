@@ -1,5 +1,8 @@
-"""WSGI entrypoint for Gunicorn / Render."""
-from app import app, application  # noqa: F401
+"""WSGI entrypoint for Gunicorn / Render.
 
-# Explicit export for gunicorn wsgi:app
+IMPORTANT: Do not name a package folder 'app/' in this repo — it shadows modules.
+This loads the Flask application from server.py.
+"""
+from server import app, application  # noqa: F401
+
 __all__ = ['app', 'application']
