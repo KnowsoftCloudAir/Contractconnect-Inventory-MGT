@@ -17,18 +17,28 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 import tempfile
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-from pptx import Presentation
-from pptx.util import Inches, Pt
-from pptx.dml.color import RGBColor
-from pptx.enum.shapes import MSO_SHAPE
-from reportlab.lib.pagesizes import A4, landscape
-from reportlab.lib import colors
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage, PageBreak
-from reportlab.lib.units import inch
+try:
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+except Exception:  # pragma: no cover
+    matplotlib = None
+    plt = None
+try:
+    from pptx import Presentation
+    from pptx.util import Inches, Pt
+    from pptx.dml.color import RGBColor
+    from pptx.enum.shapes import MSO_SHAPE
+except Exception:  # pragma: no cover
+    Presentation = None
+try:
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib import colors
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage, PageBreak
+    from reportlab.lib.units import inch
+except Exception:  # pragma: no cover
+    pass
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import (
     LoginManager, UserMixin, login_user, logout_user,
@@ -2938,6 +2948,9 @@ def assetlinks():
 @app.route('/static/manifest.json')
 def web_manifest():
     return app.send_static_file('manifest.json')
+
+
+application = app  # WSGI alias for gunicorn / Render
 
 
 if __name__ == '__main__':
