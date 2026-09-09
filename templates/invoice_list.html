@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Payment invoices – CONTRAconnect{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="mb-0">Payment invoices &amp; approval workflow</h2>
+        <p class="text-muted small mb-0">Submit → Finance review → Project Manager approval → Paid</p>
+    </div>
+    {% if current_user.role in ['rh_consultant','mel_consultant','demand_consultant','sdoc_consultant','logistics_consultant','project_manager','finance_analyst','general_admin','admin'] %}
+    <a href="{{ url_for('invoice_new') }}" class="btn btn-success">New invoice</a>
+    {% endif %}
+</div>
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0 align-middle">
+            <thead>
+                <tr>
+                    <th>Invoice #</th>
+                    <th>Submitter</th>
+                    <th>Deliverable</th>
+                    <th class="text-end">Amount</th>
+                    <th>Status</th>
+                    <th>Updated</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for inv in invoices %}
+            <tr>
+                <td>{{ inv.invoice_number }}</td>
+                <td class="small">{{ inv.submitter.full_name if inv.submitter else '—' }}</td>
+                <td class="small">{{ inv.deliverable_title }}</td>
+                <td class="text-end">{{ inv.currency }} {{ '%.2f'|format(inv.amount) }}</td>
+                <td>
+                    {% if inv.status == 'submitted' %}<span class="badge bg-warning text-dark">Awaiting Finance</span>
+                    {% elif inv.status == 'finance_review' %}<span class="badge bg-info text-dark">Awaiting PM</span>
+                    {% elif inv.status == 'pm_approved' %}<span class="badge bg-primary">Approved</span>
+                    {% elif inv.status == 'paid' %}<span class="badge bg-success">Paid</span>
+                    {% elif inv.status in ['finance_rejected','pm_rejected'] %}<span class="badge bg-danger">{{ inv.status }}</span>
+                    {% else %}<span class="badge bg-secondary">{{ inv.status }}</span>{% endif %}
+                </td>
+                <td class="small">{{ inv.updated_at.strftime('%Y-%m-%d') if inv.updated_at else '' }}</td>
+                <td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('invoice_detail', iid=inv.id) }}">Open</a></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7" class="text-muted">No invoices</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -23,6 +23,7 @@ import matplotlib.pyplot as plt
 from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
+from pptx.enum.shapes import MSO_SHAPE
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -49,6 +50,7 @@ if _db_url.startswith('postgres://'):
     _db_url = _db_url.replace('postgres://', 'postgresql://', 1)
 app.config['SQLALCHEMY_DATABASE_URI'] = _db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['MAX_CONTENT_LENGTH'] = 8 * 1024 * 1024  # 8MB uploads
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {'pool_pre_ping': True}
 
 try:
@@ -101,9 +103,51 @@ def ensure_db():
         app.logger.exception('ensure_db failed: %s', e)
 
 
+def log_activity(action, detail=None, user=None):
+    try:
+        u = user or (current_user if current_user.is_authenticated else None)
+        entry = ActivityLog(
+            user_id=u.id if u and getattr(u, 'id', None) else None,
+            email=getattr(u, 'email', None) if u else None,
+            action=action,
+            detail=(detail or '')[:255],
+            path=(request.path or '')[:255],
+            method=request.method,
+            ip_address=request.headers.get('X-Forwarded-For', request.remote_addr or '')[:64],
+            user_agent=(request.headers.get('User-Agent') or '')[:255],
+        )
+        db.session.add(entry)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+
 @app.before_request
 def _before_request_init_db():
     ensure_db()
+    # Skip static and auth endpoints for onboarding gate
+    if request.endpoint in (
+        'static', 'login', 'logout', 'register', 'admin_access',
+        'forgot_password', 'reset_password', 'onboarding', None,
+        'assetlinks', 'web_manifest', 'index', 'about',
+    ):
+        return
+    if current_user.is_authenticated:
+        # Force onboarding completion / wait for approval
+        status = getattr(current_user, 'onboarding_status', 'active') or 'active'
+        if status in ('pending_profile', 'pending_approval', 'rejected') and request.endpoint != 'onboarding':
+            return redirect(url_for('onboarding'))
+        # Lightweight page-view footprint (skip noisy endpoints)
+        # Log significant GET destinations only (avoid flooding)
+        if request.method == 'GET' and request.endpoint in (
+            'admin_dashboard', 'admin_costs', 'admin_facilities', 'export_financial_excel',
+            'export_full_excel', 'admin_period_report', 'invoice_list', 'admin_activity',
+            'admin_backup_download', 'staff_dashboard', 'provider_dashboard',
+        ):
+            try:
+                log_activity('page_view', request.endpoint)
+            except Exception:
+                pass
 
 
 # ---------------------------------------------------------------------------
@@ -115,9 +159,26 @@ class User(UserMixin, db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
     full_name = db.Column(db.String(120), nullable=False)
-    role = db.Column(db.String(40), nullable=False, default='provider')  # provider | general_admin | program_admin | finance_admin
+    role = db.Column(db.String(40), nullable=False, default='provider')
+    # Roles: project_manager | finance_analyst | rh_consultant | mel_consultant |
+    #        demand_consultant | sdoc_consultant | logistics_consultant |
+    #        provider | general_admin | program_admin | finance_admin (legacy)
+    staff_title = db.Column(db.String(120))  # e.g. Project Manager NPSA 10
     facility_id = db.Column(db.Integer, db.ForeignKey('facilities.id'), nullable=True)
     is_active = db.Column(db.Boolean, default=True)
+    # First-login onboarding
+    must_complete_onboarding = db.Column(db.Boolean, default=False)
+    onboarding_status = db.Column(db.String(30), default='active')  # pending_profile | pending_approval | active | rejected
+    activation_code = db.Column(db.String(40))  # issued by admin
+    profile_photo = db.Column(db.String(255))
+    phone = db.Column(db.String(40))
+    organization = db.Column(db.String(150))
+    role_confirmed = db.Column(db.Boolean, default=False)
+    ethics_accepted = db.Column(db.Boolean, default=False)
+    ethics_accepted_at = db.Column(db.DateTime)
+    onboarding_notes = db.Column(db.Text)
+    last_login_at = db.Column(db.DateTime)
+    password_changed_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     facility = db.relationship('Facility', back_populates='users')
@@ -127,6 +188,24 @@ class User(UserMixin, db.Model):
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
+
+    @property
+    def role_label(self):
+        labels = {
+            'project_manager': 'Project Manager',
+            'finance_analyst': 'Financial Analyst',
+            'rh_consultant': 'RH / Service Delivery Lead',
+            'mel_consultant': 'MEL Consultant',
+            'demand_consultant': 'Demand Generation Consultant',
+            'sdoc_consultant': 'Service Delivery Ops Consultant',
+            'logistics_consultant': 'Logistics & Supply Consultant',
+            'provider': 'Service Provider',
+            'general_admin': 'General Admin',
+            'program_admin': 'Program Admin',
+            'finance_admin': 'Finance Admin',
+            'admin': 'Admin',
+        }
+        return labels.get(self.role, self.role)
 
 
 class Facility(db.Model):
@@ -236,6 +315,14 @@ class ClientEncounter(db.Model):
     discontinuation_reason = db.Column(db.String(100))
     counseling_notes = db.Column(db.Text)
     observation_checklist = db.Column(db.Text)  # JSON or simple text for MVP
+    # Client identity & feedback (care-seeking panel)
+    client_code = db.Column(db.String(40))  # anonymous/site code — not full name by default
+    client_sex = db.Column(db.String(20))
+    client_residence = db.Column(db.String(120))
+    client_phone = db.Column(db.String(40))  # optional; handle per privacy policy
+    consent_to_share_story = db.Column(db.Boolean, default=False)
+    patient_testimony = db.Column(db.Text)  # feedback / story for reports
+    satisfaction_score = db.Column(db.Integer)  # 1-5
     quantity_dispensed = db.Column(db.Integer, default=0)
     product_id = db.Column(db.Integer, db.ForeignKey('products.id'))
     created_by = db.Column(db.Integer, db.ForeignKey('users.id'))
@@ -281,6 +368,110 @@ class Message(db.Model):
     parent = db.relationship('Message', remote_side=[id], backref='replies')
 
 
+class Invoice(db.Model):
+    """Consultant payment request: submit → Finance review → Project Manager approve."""
+    __tablename__ = 'invoices'
+    id = db.Column(db.Integer, primary_key=True)
+    invoice_number = db.Column(db.String(40), unique=True, nullable=False)
+    submitter_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    # Payment details
+    payee_name = db.Column(db.String(150), nullable=False)
+    bank_name = db.Column(db.String(120))
+    account_number = db.Column(db.String(60))
+    account_name = db.Column(db.String(150))
+    # Deliverable / claim
+    deliverable_title = db.Column(db.String(255), nullable=False)
+    deliverable_description = db.Column(db.Text)
+    period_start = db.Column(db.Date)
+    period_end = db.Column(db.Date)
+    amount = db.Column(db.Numeric(14, 2), nullable=False)
+    currency = db.Column(db.String(10), default='USD')
+    evidence_notes = db.Column(db.Text)  # links/descriptions of evidence
+    evidence_filename = db.Column(db.String(255))  # optional uploaded file name
+    # Workflow
+    status = db.Column(db.String(40), default='draft')
+    # draft | submitted | finance_review | finance_rejected | pm_approved | pm_rejected | paid
+    finance_reviewer_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    finance_reviewed_at = db.Column(db.DateTime)
+    finance_notes = db.Column(db.Text)
+    pm_approver_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    pm_approved_at = db.Column(db.DateTime)
+    pm_notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    submitter = db.relationship('User', foreign_keys=[submitter_id])
+    finance_reviewer = db.relationship('User', foreign_keys=[finance_reviewer_id])
+    pm_approver = db.relationship('User', foreign_keys=[pm_approver_id])
+
+
+
+
+
+class ActivityLog(db.Model):
+    """User footprint / activity monitor."""
+    __tablename__ = 'activity_logs'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    email = db.Column(db.String(120))
+    action = db.Column(db.String(80), nullable=False)  # login, logout, page_view, create, update, export, etc.
+    detail = db.Column(db.String(255))
+    path = db.Column(db.String(255))
+    method = db.Column(db.String(10))
+    ip_address = db.Column(db.String(64))
+    user_agent = db.Column(db.String(255))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship('User', foreign_keys=[user_id])
+
+
+class PasswordResetToken(db.Model):
+    __tablename__ = 'password_reset_tokens'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    token = db.Column(db.String(64), unique=True, nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    used = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship('User')
+
+
+class AppSetting(db.Model):
+    """Key-value settings including report branding and logos."""
+    __tablename__ = 'app_settings'
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(80), unique=True, nullable=False)
+    value = db.Column(db.Text)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+def get_setting(key, default=''):
+    row = AppSetting.query.filter_by(key=key).first()
+    return row.value if row and row.value is not None else default
+
+
+def set_setting(key, value):
+    row = AppSetting.query.filter_by(key=key).first()
+    if not row:
+        row = AppSetting(key=key, value=value)
+        db.session.add(row)
+    else:
+        row.value = value
+    db.session.commit()
+    return row
+
+
+def report_branding():
+    """Defaults for Benin City Mayor Challenge + editable logo path."""
+    return {
+        'programme_title': get_setting('programme_title', 'Benin City Mayor Challenge'),
+        'report_subtitle': get_setting('report_subtitle', 'CONTRAconnect — UNDP Supported Programme'),
+        'logo_path': get_setting('report_logo_path', ''),  # relative under static/
+        'org_line': get_setting('org_line', 'United Nations Development Programme (UNDP)'),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Auth helpers
 # ---------------------------------------------------------------------------
@@ -289,30 +480,67 @@ def load_user(user_id):
     return db.session.get(User, int(user_id))
 
 
-# Admin role hierarchy
-ADMIN_ROLES = ('general_admin', 'program_admin', 'finance_admin', 'admin')  # 'admin' legacy = general
-FINANCE_ROLES = ('general_admin', 'finance_admin', 'admin')
-PROGRAM_ROLES = ('general_admin', 'program_admin', 'admin')  # ops without restricting finance view for program
+# Role hierarchy — programme staff + legacy admin roles
+STAFF_ROLES = (
+    'project_manager', 'finance_analyst',
+    'rh_consultant', 'mel_consultant', 'demand_consultant',
+    'sdoc_consultant', 'logistics_consultant',
+)
+ADMIN_ROLES = ('general_admin', 'program_admin', 'finance_admin', 'admin', 'project_manager', 'finance_analyst')
+FINANCE_ROLES = ('finance_analyst', 'finance_admin', 'general_admin', 'admin')
+# Ops / programme (everything except pure finance tools for PM)
+PROGRAM_OPS_ROLES = (
+    'project_manager', 'program_admin', 'general_admin', 'admin',
+    'rh_consultant', 'mel_consultant', 'demand_consultant',
+    'sdoc_consultant', 'logistics_consultant',
+)
+CONSULTANT_ROLES = (
+    'rh_consultant', 'mel_consultant', 'demand_consultant',
+    'sdoc_consultant', 'logistics_consultant',
+)
 
 
 def _is_admin_role(role):
-    return role in ADMIN_ROLES
+    return role in ADMIN_ROLES or role in STAFF_ROLES
 
 
 def _can_export_financial(role):
-    return role in FINANCE_ROLES or role == 'admin'
+    # Project Manager: no finance downloads; Finance Analyst + system admins: yes
+    return role in FINANCE_ROLES
 
 
 def _can_manage_admins(role):
-    return role in ('general_admin', 'admin')
+    return role in ('general_admin', 'admin', 'project_manager')
+
+
+def _can_review_invoices_finance(role):
+    return role in ('finance_analyst', 'finance_admin', 'general_admin', 'admin')
+
+
+def _can_approve_invoices_pm(role):
+    return role in ('project_manager', 'program_admin', 'general_admin', 'admin')
+
+
+def _can_submit_invoice(role):
+    return role in CONSULTANT_ROLES or role in ('project_manager', 'finance_analyst', 'general_admin', 'admin')
+
+
+def _home_for_role(role):
+    if role in ('finance_analyst', 'finance_admin'):
+        return 'admin_costs'
+    if role == 'provider':
+        return 'provider_dashboard'
+    if role in STAFF_ROLES or role in ADMIN_ROLES:
+        return 'staff_dashboard'
+    return 'index'
 
 
 def admin_required(f):
-    """Any admin role."""
+    """Programme staff or admin (not pure provider)."""
     @wraps(f)
     def decorated(*args, **kwargs):
         if not current_user.is_authenticated or not _is_admin_role(current_user.role):
-            flash('Admin access required.', 'danger')
+            flash('Staff access required.', 'danger')
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated
@@ -322,35 +550,31 @@ def general_admin_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         if not current_user.is_authenticated or not _can_manage_admins(current_user.role):
-            flash('General Admin access required.', 'danger')
+            flash('Project Manager / General Admin access required.', 'danger')
             return redirect(url_for('index'))
         return f(*args, **kwargs)
     return decorated
 
 
 def finance_access_required(f):
-    """Finance dashboard + financial downloads: General Admin and Finance Admin."""
     @wraps(f)
     def decorated(*args, **kwargs):
         if not current_user.is_authenticated or not _can_export_financial(current_user.role):
-            flash('Finance access required. Program Admins cannot download financial data.', 'danger')
+            flash('Finance access required. Project Manager cannot download financial exports.', 'danger')
             return redirect(url_for('index'))
         return f(*args, **kwargs)
     return decorated
 
 
 def program_ops_required(f):
-    """Program operations (facilities, stock, encounters): General + Program admin (not Finance-only)."""
     @wraps(f)
     def decorated(*args, **kwargs):
         if not current_user.is_authenticated:
             return redirect(url_for('login'))
-        if current_user.role in ('general_admin', 'program_admin', 'admin'):
+        if current_user.role in PROGRAM_OPS_ROLES or current_user.role in ('finance_analyst', 'finance_admin'):
+            # Finance analyst can view ops; restricted actions handled in UI
             return f(*args, **kwargs)
-        if current_user.role == 'finance_admin':
-            flash('Program operations are not available to Finance Admin.', 'warning')
-            return redirect(url_for('admin_costs'))
-        flash('Admin access required.', 'danger')
+        flash('Programme access required.', 'danger')
         return redirect(url_for('login'))
     return decorated
 
@@ -509,13 +733,123 @@ def get_refusal_reasons(start_date=None, end_date=None):
 # ---------------------------------------------------------------------------
 @app.route('/')
 def index():
+    """Public marketing home; authenticated users go to their workspace."""
     if current_user.is_authenticated:
+        if getattr(current_user, 'onboarding_status', 'active') in ('pending_profile', 'pending_approval', 'rejected'):
+            return redirect(url_for('onboarding'))
+        if current_user.role == 'provider':
+            return redirect(url_for('provider_dashboard'))
         if _is_admin_role(current_user.role):
-            if current_user.role == 'finance_admin':
-                return redirect(url_for('admin_costs'))
-            return redirect(url_for('admin_dashboard'))
-        return redirect(url_for('provider_dashboard'))
-    return redirect(url_for('login'))
+            return redirect(url_for(_home_for_role(current_user.role)))
+    content = homepage_content()
+    return render_template('public_home.html', content=content)
+
+
+@app.route('/about')
+def about():
+    content = homepage_content()
+    return render_template('public_about.html', content=content)
+
+
+def homepage_content():
+    """Editable public homepage fields (defaults for Benin City Mayor Challenge)."""
+    import json as _json
+    defaults = {
+        'hero_title': 'Benin City Mayor Challenge',
+        'hero_tagline': 'Expanding equitable contraceptive choice through CONTRAconnect digital innovation',
+        'lga_name': 'Winning Local Government Area — Edo State',
+        'lga_detail': 'Highlighting the LGA recognised under the Mayor Challenge pathway in Edo State, Nigeria.',
+        'origin': (
+            'The Bloomberg Philanthropies Mayor’s Challenge invites cities worldwide to propose bold, '
+            'evidence-driven ideas that improve urban life. Benin City’s entry focuses on closing gaps in '
+            'access to quality family planning through mobile service points, community mobilisation, and '
+            'a digital platform — CONTRAconnect — that links supply, service delivery, and learning.'
+        ),
+        'funder': (
+            'Programme support is advanced through partnerships aligned with the Mayor’s Challenge ecosystem '
+            'and United Nations Development Programme (UNDP) collaboration with city and national stakeholders, '
+            'strengthening local systems rather than parallel structures.'
+        ),
+        'objectives': (
+            'Objectives include: (1) increase informed uptake of modern contraception via mobile kiosks and '
+            'parent PHC linkages; (2) prevent stock-outs with predictive inventory and redistribution; '
+            '(3) generate real-time learning on method mix, refusal reasons, and unit costs; and '
+            '(4) equip city leaders with dashboards for adaptive management.'
+        ),
+        'benefits': (
+            'For Edo State and Nigeria, the model demonstrates how city-led innovation can reduce unmet need, '
+            'improve commodity security, create accountable digital footprints for quality of care, and offer a '
+            'replicable blueprint for other LGAs — advancing reproductive health, gender equity, and data-driven governance.'
+        ),
+        'about_body': (
+            'CONTRAconnect is the digital backbone of Benin City’s Mayor Challenge family-planning initiative. '
+            'It connects kiosks, PHCs, consultants, and city administrators around inventory, encounters, cost '
+            'analytics, and approved payment workflows — with privacy and role-based access at the core.'
+        ),
+        'video_url': 'https://www.youtube.com/embed/dQw4w9WgXcQ',  # placeholder — admin replaces
+        'slide1_caption': 'Mobile kiosks bring counselling and methods closer to communities.',
+        'slide2_caption': 'Mobilisers and SBC campaigns drive informed demand.',
+        'slide3_caption': 'Client feedback shapes continuous quality improvement.',
+        'story1': '“The nurse explained every option. I chose a method that fits my life — and I did not wait all day.” — Client, pilot kiosk',
+        'story2': '“When stock was low, the app prompted redistribution. We avoided a stock-out before outreach day.” — Logistics team',
+        'story3': '“Having cost per client helps us plan with the city finance team honestly.” — Programme officer',
+        'slide1_img': 'img/slide1.jpg',
+        'slide2_img': 'img/slide2.jpg',
+        'slide3_img': 'img/slide3.jpg',
+    }
+    raw = get_setting('homepage_json', '')
+    if raw:
+        try:
+            data = _json.loads(raw)
+            defaults.update({k: v for k, v in data.items() if v is not None and v != ''})
+        except Exception:
+            pass
+    return defaults
+
+
+def save_homepage_content(data: dict):
+    import json as _json
+    set_setting('homepage_json', _json.dumps(data, ensure_ascii=False))
+
+
+@app.route('/admin/homepage', methods=['GET', 'POST'])
+@login_required
+@general_admin_required
+def admin_homepage_editor():
+    content = homepage_content()
+    if request.method == 'POST':
+        fields = [
+            'hero_title', 'hero_tagline', 'lga_name', 'lga_detail',
+            'origin', 'funder', 'objectives', 'benefits', 'about_body',
+            'video_url', 'slide1_caption', 'slide2_caption', 'slide3_caption',
+            'story1', 'story2', 'story3',
+        ]
+        for k in fields:
+            content[k] = request.form.get(k, content.get(k, ''))
+        # Normalize youtube watch URLs to embed
+        v = content.get('video_url') or ''
+        if 'youtube.com/watch' in v and 'v=' in v:
+            vid = v.split('v=')[1].split('&')[0]
+            content['video_url'] = f'https://www.youtube.com/embed/{vid}'
+        elif 'youtu.be/' in v:
+            vid = v.split('youtu.be/')[1].split('?')[0]
+            content['video_url'] = f'https://www.youtube.com/embed/{vid}'
+        for i in (1, 2, 3):
+            f = request.files.get(f'slide{i}_file')
+            if f and f.filename:
+                ext = f.filename.rsplit('.', 1)[-1].lower()
+                if ext in ('png', 'jpg', 'jpeg', 'webp'):
+                    rel = f'uploads/homepage/slide{i}.{ext}'
+                    dest = os.path.join(app.root_path, 'static', rel)
+                    os.makedirs(os.path.dirname(dest), exist_ok=True)
+                    f.save(dest)
+                    content[f'slide{i}_img'] = rel
+        save_homepage_content(content)
+        log_activity('homepage_updated')
+        flash('Homepage content saved. Public visitors will see the updates.', 'success')
+        return redirect(url_for('admin_homepage_editor'))
+    return render_template('admin_homepage.html', content=content)
+
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -527,19 +861,27 @@ def login():
         password = request.form.get('password', '')
         user = User.query.filter_by(email=email, is_active=True).first()
         if user and user.check_password(password):
-            if _is_admin_role(user.role):
-                flash('Please use the authorised admin access page.', 'warning')
-                return redirect(url_for('admin_access'))
+            if getattr(user, 'onboarding_status', 'active') == 'rejected':
+                flash('Your account registration was not approved. Contact the administrator.', 'danger')
+                return redirect(url_for('login'))
             login_user(user, remember=True)
-            flash(f'Welcome back, {user.full_name}!', 'success')
+            user.last_login_at = datetime.utcnow()
+            db.session.commit()
+            log_activity('login', f'role={user.role}', user=user)
+            flash(f'Welcome, {user.full_name} ({user.role_label}).', 'success')
+            if getattr(user, 'onboarding_status', 'active') in ('pending_profile', 'pending_approval'):
+                return redirect(url_for('onboarding'))
             return redirect(url_for('index'))
         flash('Invalid email or password.', 'danger')
+        log_activity('login_failed', email)
     return render_template('login.html')
 
 
 @app.route('/logout')
 @login_required
 def logout():
+    if current_user.is_authenticated:
+        log_activity('logout')
     logout_user()
     flash('You have been logged out.', 'info')
     return redirect(url_for('login'))
@@ -558,10 +900,8 @@ def admin_access():
         user = User.query.filter_by(email=email, is_active=True).first()
         if user and _is_admin_role(user.role) and user.check_password(password):
             login_user(user, remember=False)
-            flash(f'Welcome, {user.full_name} ({user.role.replace("_", " ").title()}).', 'success')
-            if user.role == 'finance_admin':
-                return redirect(url_for('admin_costs'))
-            return redirect(url_for('admin_dashboard'))
+            flash(f'Welcome, {user.full_name} ({user.role_label}).', 'success')
+            return redirect(url_for(_home_for_role(user.role)))
         # Generic message — do not reveal whether email exists
         flash('Invalid credentials or unauthorised access.', 'danger')
         return redirect(url_for('admin_access'))
@@ -1322,6 +1662,11 @@ def provider_encounter():
         qty = int(request.form.get('quantity_dispensed') or 0)
         method_accepted = request.form.get('method_accepted') or None
 
+        sat = request.form.get('satisfaction_score')
+        try:
+            sat_i = int(sat) if sat else None
+        except Exception:
+            sat_i = None
         enc = ClientEncounter(
             facility_id=fac.id,
             encounter_date=datetime.strptime(request.form['encounter_date'], '%Y-%m-%d').date(),
@@ -1335,6 +1680,13 @@ def provider_encounter():
             discontinuation_reason=request.form.get('discontinuation_reason') if outcome == 'discontinued' else None,
             counseling_notes=request.form.get('counseling_notes'),
             observation_checklist=request.form.get('observation_checklist'),
+            client_code=request.form.get('client_code', '').strip() or None,
+            client_sex=request.form.get('client_sex') or None,
+            client_residence=request.form.get('client_residence', '').strip() or None,
+            client_phone=request.form.get('client_phone', '').strip() or None,
+            consent_to_share_story=bool(request.form.get('consent_to_share_story')),
+            patient_testimony=request.form.get('patient_testimony', '').strip() or None,
+            satisfaction_score=sat_i,
             quantity_dispensed=qty if outcome == 'accepted' else 0,
             product_id=int(product_id) if product_id else None,
             created_by=current_user.id
@@ -1601,13 +1953,14 @@ def _make_chart_images(cost_data, uptake, tmpdir):
 @login_required
 @admin_required
 def admin_period_report(period, fmt):
-    """Monthly / quarterly / yearly report as pptx or pdf."""
-    if period not in ('monthly', 'quarterly', 'yearly'):
+    """Monthly / quarterly / yearly report as pptx or pdf — branded Benin City Mayor Challenge."""
+    if period not in ('monthly', 'quarterly', 'yearly', 'programmatic'):
         abort(404)
     if fmt not in ('pptx', 'pdf'):
         abort(404)
-    # Finance-only admins can get reports; program admins can too (ops + charts)
-    start, end, label = _period_bounds(period)
+    start, end, label = _period_bounds(period if period != 'programmatic' else 'quarterly')
+    if period == 'programmatic':
+        label = f'Programmatic briefing ({start.isoformat()} → {end.isoformat()})'
     cost_data = compute_cost_metrics(start, end)
     uptake = get_method_uptake(start, end)
     facilities = Facility.query.order_by(Facility.name).all()
@@ -1618,116 +1971,223 @@ def admin_period_report(period, fmt):
             ClientEncounter.encounter_date.between(start, end),
             ClientEncounter.outcome.in_(['accepted', 'discontinued']),
         ).scalar() or 0
+        stock_lines = StockItem.query.filter_by(facility_id=f.id).count()
         fac_rows.append({
-            'name': f.name, 'type': f.facility_type, 'active': f.is_active,
+            'id': f.id, 'name': f.name, 'type': f.facility_type, 'active': f.is_active,
             'clients': clients, 'contact': f.contact_person or '',
+            'address': f.address or '', 'stock_lines': stock_lines,
         })
+    testimonies = ClientEncounter.query.filter(
+        ClientEncounter.encounter_date.between(start, end),
+        ClientEncounter.patient_testimony.isnot(None),
+        ClientEncounter.patient_testimony != '',
+        ClientEncounter.consent_to_share_story == True,
+    ).order_by(ClientEncounter.encounter_date.desc()).limit(12).all()
+    brand = report_branding()
 
     with tempfile.TemporaryDirectory() as tmpdir:
         charts = _make_chart_images(cost_data, uptake, tmpdir)
         if fmt == 'pptx':
-            return _build_pptx_report(label, period, cost_data, uptake, fac_rows, charts, start, end)
-        return _build_pdf_report(label, period, cost_data, uptake, fac_rows, charts, start, end)
+            return _build_pptx_report(label, period, cost_data, uptake, fac_rows, charts, start, end, testimonies, brand)
+        return _build_pdf_report(label, period, cost_data, uptake, fac_rows, charts, start, end, testimonies, brand)
 
 
-def _build_pptx_report(label, period, cost_data, uptake, fac_rows, charts, start, end):
+
+def _logo_abs_path(brand):
+    rel = (brand or {}).get('logo_path') or ''
+    if not rel:
+        return None
+    p = os.path.join(app.root_path, 'static', rel)
+    return p if os.path.isfile(p) else None
+
+
+def _build_pptx_report(label, period, cost_data, uptake, fac_rows, charts, start, end, testimonies=None, brand=None):
+    brand = brand or report_branding()
+    testimonies = testimonies or []
     prs = Presentation()
     prs.slide_width = Inches(13.333)
     prs.slide_height = Inches(7.5)
+    teal = RGBColor(0x0D, 0x6E, 0x6E)
+    logo = _logo_abs_path(brand)
 
-    def add_title_slide(title, subtitle):
-        layout = prs.slide_layouts[6]  # blank
-        slide = prs.slides.add_slide(layout)
-        box = slide.shapes.add_textbox(Inches(0.8), Inches(2.5), Inches(11.5), Inches(1.5))
-        tf = box.text_frame
-        p = tf.paragraphs[0]
-        p.text = title
-        p.font.size = Pt(32)
+    def header_bar(slide, title_text):
+        shape = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0), Inches(0), Inches(13.333), Inches(0.85))  # rectangle
+        shape.fill.solid()
+        shape.fill.fore_color.rgb = teal
+        shape.line.fill.background()
+        box = slide.shapes.add_textbox(Inches(0.4), Inches(0.18), Inches(10), Inches(0.55))
+        p = box.text_frame.paragraphs[0]
+        p.text = f"{brand.get('programme_title', 'Benin City Mayor Challenge')}  |  {title_text}"
+        p.font.size = Pt(16)
         p.font.bold = True
-        p.font.color.rgb = RGBColor(0x0D, 0x6E, 0x6E)
-        box2 = slide.shapes.add_textbox(Inches(0.8), Inches(4.0), Inches(11.5), Inches(1))
-        box2.text_frame.paragraphs[0].text = subtitle
-        box2.text_frame.paragraphs[0].font.size = Pt(16)
+        p.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+        if logo:
+            try:
+                slide.shapes.add_picture(logo, Inches(11.6), Inches(0.12), height=Inches(0.6))
+            except Exception:
+                pass
+        sub = slide.shapes.add_textbox(Inches(0.4), Inches(0.9), Inches(12), Inches(0.35))
+        sp = sub.text_frame.paragraphs[0]
+        sp.text = brand.get('org_line') or brand.get('report_subtitle') or ''
+        sp.font.size = Pt(11)
+        sp.font.color.rgb = RGBColor(0x55, 0x55, 0x55)
+
+    def add_title_slide():
+        layout = prs.slide_layouts[6]
+        slide = prs.slides.add_slide(layout)
+        bar = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0), Inches(0), Inches(13.333), Inches(7.5))
+        bar.fill.solid()
+        bar.fill.fore_color.rgb = teal
+        bar.line.fill.background()
+        if logo:
+            try:
+                slide.shapes.add_picture(logo, Inches(5.9), Inches(1.2), height=Inches(1.1))
+            except Exception:
+                pass
+        box = slide.shapes.add_textbox(Inches(0.8), Inches(2.6), Inches(11.7), Inches(1.2))
+        p = box.text_frame.paragraphs[0]
+        p.text = brand.get('programme_title', 'Benin City Mayor Challenge')
+        p.font.size = Pt(34)
+        p.font.bold = True
+        p.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+        box2 = slide.shapes.add_textbox(Inches(0.8), Inches(3.9), Inches(11.7), Inches(1.5))
+        t2 = box2.text_frame
+        t2.paragraphs[0].text = f"CONTRAconnect programmatic report — {label}"
+        t2.paragraphs[0].font.size = Pt(20)
+        t2.paragraphs[0].font.color.rgb = RGBColor(0xE8, 0xF5, 0xF5)
+        p3 = t2.add_paragraph()
+        p3.text = f"Period {start.isoformat()} to {end.isoformat()}  ·  Generated {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC"
+        p3.font.size = Pt(13)
+        p3.font.color.rgb = RGBColor(0xCC, 0xEE, 0xEE)
 
     def add_section(title):
         layout = prs.slide_layouts[6]
         slide = prs.slides.add_slide(layout)
-        box = slide.shapes.add_textbox(Inches(0.5), Inches(0.3), Inches(12), Inches(0.6))
-        box.text_frame.paragraphs[0].text = title
-        box.text_frame.paragraphs[0].font.size = Pt(22)
-        box.text_frame.paragraphs[0].font.bold = True
+        header_bar(slide, title)
         return slide
 
-    add_title_slide(
-        f'CONTRAconnect {period.title()} Report',
-        f'{label}  |  {start.isoformat()} → {end.isoformat()}  |  Generated {datetime.utcnow().strftime("%Y-%m-%d %H:%M")} UTC'
-    )
+    add_title_slide()
 
-    # Dashboard KPIs
-    slide = add_section('Admin dashboard — key indicators')
+    # KPI slide
+    slide = add_section('Programme snapshot')
     kpis = [
         f"Clients served: {cost_data['total_clients']}",
         f"Operational cost: {cost_data['total_operational_cost']:,.2f}",
-        f"Platform build (separate): {cost_data['platform_build_cost']:,.2f}",
-        f"Unit cost / client: {cost_data['unit_cost_per_client']:,.2f}",
+        f"Platform build (tracked separately): {cost_data['platform_build_cost']:,.2f}",
+        f"Unit cost per client: {cost_data['unit_cost_per_client']:,.2f}",
+        f"Active service points in report: {sum(1 for r in fac_rows if r.get('active'))}",
     ]
-    box = slide.shapes.add_textbox(Inches(0.5), Inches(1.2), Inches(12), Inches(2))
+    box = slide.shapes.add_textbox(Inches(0.5), Inches(1.4), Inches(6), Inches(5))
     tf = box.text_frame
     tf.word_wrap = True
     for i, line in enumerate(kpis):
         p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
-        p.text = '• ' + line
+        p.text = '●  ' + line
         p.font.size = Pt(18)
+        p.space_after = Pt(10)
     if charts.get('uptake'):
-        slide.shapes.add_picture(charts['uptake'], Inches(0.5), Inches(3.5), width=Inches(6))
-    if charts.get('kiosk'):
-        slide.shapes.add_picture(charts['kiosk'], Inches(6.8), Inches(3.5), width=Inches(6))
+        slide.shapes.add_picture(charts['uptake'], Inches(7.0), Inches(1.5), width=Inches(5.8))
 
-    # Cost analysis
-    slide = add_section('Cost analysis')
-    box = slide.shapes.add_textbox(Inches(0.5), Inches(1.0), Inches(12), Inches(1.5))
-    tf = box.text_frame
-    tf.paragraphs[0].text = (
-        f"Unit cost per client = total operational cost ÷ clients served. "
-        f"Platform build costs are tracked separately and excluded from unit cost."
-    )
-    tf.paragraphs[0].font.size = Pt(14)
-    if charts.get('method'):
-        slide.shapes.add_picture(charts['method'], Inches(0.5), Inches(2.5), width=Inches(5))
-    if charts.get('kiosk'):
-        slide.shapes.add_picture(charts['kiosk'], Inches(6.5), Inches(2.5), width=Inches(6))
-
-    # Facilities summary
-    slide = add_section('Facilities summary')
-    rows = [['Facility', 'Type', 'Active', 'Clients in period', 'Contact']]
-    for r in fac_rows:
-        rows.append([r['name'], r['type'], 'Yes' if r['active'] else 'No', str(r['clients']), r['contact']])
-    # simple text table
-    box = slide.shapes.add_textbox(Inches(0.5), Inches(1.1), Inches(12), Inches(5.5))
+    # Data analysis
+    slide = add_section('Data analysis — method uptake')
+    if charts.get('uptake'):
+        slide.shapes.add_picture(charts['uptake'], Inches(0.5), Inches(1.4), width=Inches(6.2))
+    box = slide.shapes.add_textbox(Inches(7.0), Inches(1.4), Inches(5.8), Inches(5))
     tf = box.text_frame
     tf.word_wrap = True
-    for i, row in enumerate(rows[:18]):
-        p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
-        p.text = ' | '.join(row)
-        p.font.size = Pt(12 if i else 13)
-        p.font.bold = (i == 0)
+    tf.paragraphs[0].text = 'Method mix (accepted encounters)'
+    tf.paragraphs[0].font.bold = True
+    tf.paragraphs[0].font.size = Pt(14)
+    for u in (uptake or [])[:10]:
+        p = tf.add_paragraph()
+        p.text = f"{u['method']}: {u['count']} ({u['pct']}%)"
+        p.font.size = Pt(13)
+
+    # Financial analysis
+    slide = add_section('Financial analysis')
+    box = slide.shapes.add_textbox(Inches(0.5), Inches(1.35), Inches(12), Inches(0.8))
+    box.text_frame.paragraphs[0].text = (
+        'Unit cost per client = operational cost ÷ clients served. Platform build costs are excluded from unit cost.'
+    )
+    box.text_frame.paragraphs[0].font.size = Pt(13)
+    if charts.get('kiosk'):
+        slide.shapes.add_picture(charts['kiosk'], Inches(0.4), Inches(2.2), width=Inches(6.3))
+    if charts.get('method'):
+        slide.shapes.add_picture(charts['method'], Inches(7.0), Inches(2.2), width=Inches(5.5))
+
+    # Per facility / kiosk / PHC slides
+    for r in fac_rows[:12]:
+        slide = add_section(f"Service point — {r['name']}")
+        box = slide.shapes.add_textbox(Inches(0.5), Inches(1.4), Inches(12), Inches(5))
+        tf = box.text_frame
+        tf.word_wrap = True
+        lines = [
+            f"Type: {r['type'].upper()}   ·   Status: {'Active' if r['active'] else 'Inactive'}",
+            f"Clients served in period: {r['clients']}",
+            f"Stock product lines on hand: {r.get('stock_lines', '—')}",
+            f"Contact: {r.get('contact') or '—'}",
+            f"Address: {r.get('address') or '—'}",
+        ]
+        for i, line in enumerate(lines):
+            p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
+            p.text = line
+            p.font.size = Pt(18)
+            p.space_after = Pt(8)
+
+    # Patient testimonies
+    slide = add_section('Client voices (consented testimonies)')
+    box = slide.shapes.add_textbox(Inches(0.5), Inches(1.35), Inches(12.3), Inches(5.8))
+    tf = box.text_frame
+    tf.word_wrap = True
+    if not testimonies:
+        tf.paragraphs[0].text = 'No consented patient testimonies recorded in this period. Capture feedback on the encounter form (with consent).'
+        tf.paragraphs[0].font.size = Pt(14)
+    else:
+        for i, tmy in enumerate(testimonies[:6]):
+            p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
+            fac_name = tmy.facility.name if tmy.facility else 'Site'
+            score = f" · Satisfaction {tmy.satisfaction_score}/5" if tmy.satisfaction_score else ''
+            p.text = f"“{(tmy.patient_testimony or '')[:280]}”"
+            p.font.size = Pt(13)
+            p.font.italic = True
+            p2 = tf.add_paragraph()
+            p2.text = f"— {tmy.client_code or 'Client'} · {fac_name} · {tmy.encounter_date}{score}"
+            p2.font.size = Pt(11)
+            p2.space_after = Pt(12)
+
+    # Closing
+    slide = add_section('Closing')
+    box = slide.shapes.add_textbox(Inches(0.8), Inches(2.5), Inches(11.5), Inches(3))
+    tf = box.text_frame
+    tf.paragraphs[0].text = brand.get('programme_title', 'Benin City Mayor Challenge')
+    tf.paragraphs[0].font.size = Pt(24)
+    tf.paragraphs[0].font.bold = True
+    tf.paragraphs[0].font.color.rgb = teal
+    p = tf.add_paragraph()
+    p.text = brand.get('report_subtitle') or 'CONTRAconnect digital platform'
+    p.font.size = Pt(16)
+    p = tf.add_paragraph()
+    p.text = brand.get('org_line') or ''
+    p.font.size = Pt(14)
 
     buf = BytesIO()
     prs.save(buf)
     buf.seek(0)
-    fname = f'CONTRAconnect_{period}_{label.replace(" ", "_")}.pptx'
+    fname = f"{brand.get('programme_title','Benin_City').replace(' ','_')}_{period}_{start}.pptx"
     return send_file(buf, as_attachment=True, download_name=fname,
                      mimetype='application/vnd.openxmlformats-officedocument.presentationml.presentation')
 
 
-def _build_pdf_report(label, period, cost_data, uptake, fac_rows, charts, start, end):
+def _build_pdf_report(label, period, cost_data, uptake, fac_rows, charts, start, end, testimonies=None, brand=None):
     buf = BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=landscape(A4), leftMargin=0.6*inch, rightMargin=0.6*inch,
                             topMargin=0.5*inch, bottomMargin=0.5*inch)
     styles = getSampleStyleSheet()
     title_style = ParagraphStyle('T', parent=styles['Heading1'], textColor=colors.HexColor('#0d6e6e'))
     story = []
-    story.append(Paragraph(f'CONTRAconnect {period.title()} Report — {label}', title_style))
+    brand = brand or report_branding()
+    story.append(Paragraph(brand.get('programme_title', 'Benin City Mayor Challenge'), title_style))
+    story.append(Paragraph(f"CONTRAconnect {period.title()} Report — {label}", styles['Heading2']))
     story.append(Paragraph(f'Period: {start.isoformat()} to {end.isoformat()}', styles['Normal']))
     story.append(Spacer(1, 12))
     story.append(Paragraph('Key indicators', styles['Heading2']))
@@ -1782,6 +2242,538 @@ def _build_pdf_report(label, period, cost_data, uptake, fac_rows, charts, start,
 
 
 
+
+
+# ---------------------------------------------------------------------------
+# Onboarding, password reset, activity monitor
+# ---------------------------------------------------------------------------
+@app.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip().lower()
+        user = User.query.filter_by(email=email, is_active=True).first()
+        # Always show same message (do not reveal account existence)
+        msg = 'If an account exists for that email, a reset link is available below (demo mode) or was sent by email.'
+        if user:
+            import secrets
+            token = secrets.token_urlsafe(32)
+            prt = PasswordResetToken(
+                user_id=user.id,
+                token=token,
+                expires_at=datetime.utcnow() + timedelta(hours=2),
+            )
+            db.session.add(prt)
+            db.session.commit()
+            log_activity('password_reset_request', email, user=user)
+            # Demo / no-SMTP: show one-time link on screen
+            reset_url = url_for('reset_password', token=token, _external=True)
+            flash(msg, 'info')
+            flash(f'Reset link (valid 2 hours): {reset_url}', 'warning')
+        else:
+            flash(msg, 'info')
+        return redirect(url_for('forgot_password'))
+    return render_template('forgot_password.html')
+
+
+@app.route('/reset-password/<token>', methods=['GET', 'POST'])
+def reset_password(token):
+    prt = PasswordResetToken.query.filter_by(token=token, used=False).first()
+    if not prt or prt.expires_at < datetime.utcnow():
+        flash('This reset link is invalid or has expired.', 'danger')
+        return redirect(url_for('forgot_password'))
+    user = db.session.get(User, prt.user_id)
+    if request.method == 'POST':
+        pw = request.form.get('password', '')
+        confirm = request.form.get('confirm_password', '')
+        if pw != confirm:
+            flash('Passwords do not match.', 'danger')
+            return redirect(url_for('reset_password', token=token))
+        strong = _is_admin_role(user.role) if user else False
+        ok, msg = validate_password_strength(pw, min_length=10 if strong else 8, require_strong=strong)
+        if not ok:
+            flash(msg, 'danger')
+            return redirect(url_for('reset_password', token=token))
+        user.set_password(pw)
+        user.password_changed_at = datetime.utcnow()
+        prt.used = True
+        db.session.commit()
+        log_activity('password_reset_complete', user=user)
+        flash('Password updated. You can sign in now.', 'success')
+        return redirect(url_for('login'))
+    return render_template('reset_password.html', token=token)
+
+
+@app.route('/onboarding', methods=['GET', 'POST'])
+@login_required
+def onboarding():
+    user = current_user
+    status = getattr(user, 'onboarding_status', 'active') or 'active'
+    if status == 'active' and not getattr(user, 'must_complete_onboarding', False):
+        return redirect(url_for('index'))
+    if status == 'pending_approval':
+        return render_template('onboarding.html', stage='waiting')
+    if status == 'rejected':
+        return render_template('onboarding.html', stage='rejected')
+
+    if request.method == 'POST':
+        code = request.form.get('activation_code', '').strip()
+        if not user.activation_code or code != user.activation_code:
+            flash('Invalid activation code. Use the code issued by your administrator.', 'danger')
+            return redirect(url_for('onboarding'))
+        if not request.form.get('role_confirmed'):
+            flash('Please confirm you are willing to perform the assigned role.', 'danger')
+            return redirect(url_for('onboarding'))
+        if not request.form.get('ethics_accepted'):
+            flash('You must accept the organisation ethics & privacy commitment.', 'danger')
+            return redirect(url_for('onboarding'))
+        user.phone = request.form.get('phone', '').strip()
+        user.organization = request.form.get('organization', '').strip()
+        user.full_name = request.form.get('full_name', user.full_name).strip() or user.full_name
+        user.role_confirmed = True
+        user.ethics_accepted = True
+        user.ethics_accepted_at = datetime.utcnow()
+        user.onboarding_notes = request.form.get('onboarding_notes', '').strip()
+        photo = request.files.get('profile_photo')
+        if photo and photo.filename:
+            ext = photo.filename.rsplit('.', 1)[-1].lower()
+            if ext in ('png', 'jpg', 'jpeg', 'webp'):
+                fname = f"user_{user.id}_{int(datetime.utcnow().timestamp())}.{ext}"
+                dest_dir = os.path.join(app.root_path, 'static', 'uploads', 'profiles')
+                os.makedirs(dest_dir, exist_ok=True)
+                photo.save(os.path.join(dest_dir, fname))
+                user.profile_photo = f'uploads/profiles/{fname}'
+        user.onboarding_status = 'pending_approval'
+        user.must_complete_onboarding = False
+        db.session.commit()
+        log_activity('onboarding_submitted')
+        flash('Profile submitted. An administrator will approve your access.', 'success')
+        return redirect(url_for('onboarding'))
+
+    return render_template('onboarding.html', stage='form')
+
+
+@app.route('/admin/staff-approvals')
+@login_required
+@general_admin_required
+def admin_staff_approvals():
+    pending = User.query.filter_by(onboarding_status='pending_approval').order_by(User.created_at.desc()).all()
+    awaiting_profile = User.query.filter_by(onboarding_status='pending_profile').order_by(User.created_at.desc()).all()
+    return render_template('admin_staff_approvals.html', pending=pending, awaiting_profile=awaiting_profile)
+
+
+@app.route('/admin/staff-approvals/<int:uid>/<action>', methods=['POST'])
+@login_required
+@general_admin_required
+def admin_staff_approval_action(uid, action):
+    user = db.session.get(User, uid)
+    if not user:
+        abort(404)
+    if action == 'approve':
+        user.onboarding_status = 'active'
+        user.is_active = True
+        user.must_complete_onboarding = False
+        user.activation_code = None
+        flash(f'{user.full_name} approved for login.', 'success')
+        log_activity('staff_approved', user.email)
+    elif action == 'reject':
+        user.onboarding_status = 'rejected'
+        user.is_active = False
+        flash(f'{user.full_name} rejected.', 'warning')
+        log_activity('staff_rejected', user.email)
+    db.session.commit()
+    return redirect(url_for('admin_staff_approvals'))
+
+
+@app.route('/admin/staff-invite', methods=['POST'])
+@login_required
+@general_admin_required
+def admin_staff_invite():
+    """Admin pre-creates staff with temporary password + activation code."""
+    import secrets
+    email = request.form.get('email', '').strip().lower()
+    full_name = request.form.get('full_name', '').strip()
+    role = request.form.get('role', 'mel_consultant')
+    temp_pw = request.form.get('temp_password', '').strip() or secrets.token_urlsafe(8)
+    code = request.form.get('activation_code', '').strip() or secrets.token_hex(3).upper()
+    if User.query.filter_by(email=email).first():
+        flash('Email already exists.', 'warning')
+        return redirect(url_for('admin_staff_approvals'))
+    ok, msg = validate_password_strength(temp_pw, min_length=8, require_strong=False)
+    if not ok:
+        flash(msg, 'danger')
+        return redirect(url_for('admin_staff_approvals'))
+    u = User(
+        email=email,
+        full_name=full_name,
+        role=role,
+        staff_title=request.form.get('staff_title', ''),
+        is_active=True,
+        must_complete_onboarding=True,
+        onboarding_status='pending_profile',
+        activation_code=code,
+    )
+    u.set_password(temp_pw)
+    db.session.add(u)
+    db.session.commit()
+    log_activity('staff_invited', email)
+    flash(f'Staff invited. Email: {email} · Temp password: {temp_pw} · Activation code: {code} — share securely.', 'success')
+    return redirect(url_for('admin_staff_approvals'))
+
+
+@app.route('/admin/activity')
+@login_required
+@general_admin_required
+def admin_activity():
+    """Monitor user footprints and activities."""
+    q = ActivityLog.query.order_by(ActivityLog.created_at.desc())
+    user_filter = request.args.get('user_id')
+    action_filter = request.args.get('action')
+    if user_filter:
+        q = q.filter_by(user_id=int(user_filter))
+    if action_filter:
+        q = q.filter_by(action=action_filter)
+    logs = q.limit(300).all()
+    users = User.query.order_by(User.full_name).all()
+    return render_template('admin_activity.html', logs=logs, users=users,
+                           user_filter=user_filter, action_filter=action_filter)
+
+
+
+# ---------------------------------------------------------------------------
+# Staff home + Invoice / payment workflow
+# ---------------------------------------------------------------------------
+@app.route('/staff')
+@login_required
+@admin_required
+def staff_dashboard():
+    """Role-aware landing page for programme staff."""
+    role = current_user.role
+    pending_finance = Invoice.query.filter_by(status='submitted').count()
+    pending_pm = Invoice.query.filter_by(status='finance_review').count()
+    my_invoices = Invoice.query.filter_by(submitter_id=current_user.id).order_by(
+        Invoice.created_at.desc()
+    ).limit(8).all()
+    recent_all = Invoice.query.order_by(Invoice.created_at.desc()).limit(10).all()
+    return render_template(
+        'staff_dashboard.html',
+        pending_finance=pending_finance,
+        pending_pm=pending_pm,
+        my_invoices=my_invoices,
+        recent_all=recent_all,
+        role=role,
+    )
+
+
+@app.route('/invoices')
+@login_required
+@admin_required
+def invoice_list():
+    role = current_user.role
+    q = Invoice.query.order_by(Invoice.created_at.desc())
+    if role in CONSULTANT_ROLES:
+        q = q.filter(
+            (Invoice.submitter_id == current_user.id) |
+            (Invoice.status.in_(['submitted', 'finance_review', 'pm_approved', 'paid', 'finance_rejected', 'pm_rejected']))
+        )
+    invoices = q.limit(200).all()
+    return render_template('invoice_list.html', invoices=invoices)
+
+
+@app.route('/invoices/new', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def invoice_new():
+    if not _can_submit_invoice(current_user.role):
+        flash('You are not authorised to submit payment invoices.', 'danger')
+        return redirect(url_for('invoice_list'))
+    if request.method == 'POST':
+        action = request.form.get('action', 'draft')
+        inv_no = f"INV-{datetime.utcnow().strftime('%Y%m%d')}-{current_user.id}-{int(datetime.utcnow().timestamp()) % 10000}"
+        try:
+            amount = Decimal(request.form.get('amount', '0'))
+        except Exception:
+            flash('Invalid amount.', 'danger')
+            return redirect(url_for('invoice_new'))
+        status = 'submitted' if action == 'submit' else 'draft'
+        inv = Invoice(
+            invoice_number=inv_no,
+            submitter_id=current_user.id,
+            payee_name=request.form.get('payee_name', '').strip() or current_user.full_name,
+            bank_name=request.form.get('bank_name', '').strip(),
+            account_number=request.form.get('account_number', '').strip(),
+            account_name=request.form.get('account_name', '').strip(),
+            deliverable_title=request.form.get('deliverable_title', '').strip(),
+            deliverable_description=request.form.get('deliverable_description', '').strip(),
+            amount=amount,
+            currency=request.form.get('currency', 'USD'),
+            evidence_notes=request.form.get('evidence_notes', '').strip(),
+            status=status,
+        )
+        ps = request.form.get('period_start')
+        pe = request.form.get('period_end')
+        if ps:
+            inv.period_start = datetime.strptime(ps, '%Y-%m-%d').date()
+        if pe:
+            inv.period_end = datetime.strptime(pe, '%Y-%m-%d').date()
+        # Optional file upload
+        f = request.files.get('evidence_file')
+        if f and f.filename:
+            safe = f"{inv_no}_{f.filename.replace(' ', '_')[:80]}"
+            upload_dir = os.path.join(app.root_path, 'static', 'uploads', 'invoices')
+            os.makedirs(upload_dir, exist_ok=True)
+            f.save(os.path.join(upload_dir, safe))
+            inv.evidence_filename = safe
+        if not inv.deliverable_title or amount <= 0:
+            flash('Deliverable title and a positive amount are required.', 'danger')
+            return redirect(url_for('invoice_new'))
+        db.session.add(inv)
+        db.session.commit()
+        flash(f'Invoice {inv.invoice_number} saved as {status}.', 'success')
+        return redirect(url_for('invoice_detail', iid=inv.id))
+    return render_template('invoice_form.html')
+
+
+@app.route('/invoices/<int:iid>')
+@login_required
+@admin_required
+def invoice_detail(iid):
+    inv = db.session.get(Invoice, iid)
+    if not inv:
+        abort(404)
+    return render_template('invoice_detail.html', inv=inv)
+
+
+@app.route('/invoices/<int:iid>/submit', methods=['POST'])
+@login_required
+@admin_required
+def invoice_submit(iid):
+    inv = db.session.get(Invoice, iid)
+    if not inv or inv.submitter_id != current_user.id:
+        abort(404)
+    if inv.status != 'draft':
+        flash('Only draft invoices can be submitted.', 'warning')
+        return redirect(url_for('invoice_detail', iid=iid))
+    inv.status = 'submitted'
+    db.session.commit()
+    flash('Invoice submitted for Finance review.', 'success')
+    return redirect(url_for('invoice_detail', iid=iid))
+
+
+@app.route('/invoices/<int:iid>/finance-review', methods=['POST'])
+@login_required
+@admin_required
+def invoice_finance_review(iid):
+    if not _can_review_invoices_finance(current_user.role):
+        flash('Only the Financial Analyst can review invoices.', 'danger')
+        return redirect(url_for('invoice_detail', iid=iid))
+    inv = db.session.get(Invoice, iid)
+    if not inv or inv.status != 'submitted':
+        flash('Invoice is not awaiting finance review.', 'warning')
+        return redirect(url_for('invoice_list'))
+    decision = request.form.get('decision')
+    inv.finance_notes = request.form.get('finance_notes', '').strip()
+    inv.finance_reviewer_id = current_user.id
+    inv.finance_reviewed_at = datetime.utcnow()
+    if decision == 'approve':
+        inv.status = 'finance_review'  # means finance cleared → awaiting PM
+        flash('Finance review completed. Awaiting Project Manager approval.', 'success')
+    else:
+        inv.status = 'finance_rejected'
+        flash('Invoice rejected by Finance.', 'warning')
+    db.session.commit()
+    return redirect(url_for('invoice_detail', iid=iid))
+
+
+@app.route('/invoices/<int:iid>/pm-approve', methods=['POST'])
+@login_required
+@admin_required
+def invoice_pm_approve(iid):
+    if not _can_approve_invoices_pm(current_user.role):
+        flash('Only the Project Manager can give final approval.', 'danger')
+        return redirect(url_for('invoice_detail', iid=iid))
+    inv = db.session.get(Invoice, iid)
+    if not inv or inv.status != 'finance_review':
+        flash('Invoice must pass Finance review before PM approval.', 'warning')
+        return redirect(url_for('invoice_list'))
+    decision = request.form.get('decision')
+    inv.pm_notes = request.form.get('pm_notes', '').strip()
+    inv.pm_approver_id = current_user.id
+    inv.pm_approved_at = datetime.utcnow()
+    if decision == 'approve':
+        inv.status = 'pm_approved'
+        flash('Invoice approved by Project Manager.', 'success')
+    else:
+        inv.status = 'pm_rejected'
+        flash('Invoice rejected by Project Manager.', 'warning')
+    db.session.commit()
+    return redirect(url_for('invoice_detail', iid=iid))
+
+
+@app.route('/invoices/<int:iid>/mark-paid', methods=['POST'])
+@login_required
+@admin_required
+def invoice_mark_paid(iid):
+    if not _can_review_invoices_finance(current_user.role):
+        flash('Only Finance can mark invoices as paid.', 'danger')
+        return redirect(url_for('invoice_detail', iid=iid))
+    inv = db.session.get(Invoice, iid)
+    if not inv or inv.status != 'pm_approved':
+        flash('Only PM-approved invoices can be marked paid.', 'warning')
+        return redirect(url_for('invoice_list'))
+    inv.status = 'paid'
+    db.session.commit()
+    flash('Invoice marked as paid.', 'success')
+    return redirect(url_for('invoice_detail', iid=iid))
+
+
+
+
+# ---------------------------------------------------------------------------
+# Report branding + comprehensive backup / restore
+# ---------------------------------------------------------------------------
+@app.route('/admin/branding', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def admin_branding():
+    """Edit programme title and upload logo used on all reports / PowerPoints."""
+    if current_user.role not in ('project_manager', 'general_admin', 'admin', 'program_admin', 'finance_analyst'):
+        flash('Not authorised to edit branding.', 'danger')
+        return redirect(url_for('index'))
+    brand = report_branding()
+    if request.method == 'POST':
+        set_setting('programme_title', request.form.get('programme_title', '').strip() or 'Benin City Mayor Challenge')
+        set_setting('report_subtitle', request.form.get('report_subtitle', '').strip())
+        set_setting('org_line', request.form.get('org_line', '').strip())
+        f = request.files.get('logo')
+        if f and f.filename:
+            ext = f.filename.rsplit('.', 1)[-1].lower()
+            if ext in ('png', 'jpg', 'jpeg', 'gif', 'webp'):
+                rel = f'uploads/branding/report_logo.{ext}'
+                dest_dir = os.path.join(app.root_path, 'static', 'uploads', 'branding')
+                os.makedirs(dest_dir, exist_ok=True)
+                dest = os.path.join(app.root_path, 'static', rel)
+                f.save(dest)
+                set_setting('report_logo_path', rel)
+        flash('Branding settings saved. All new reports will use this heading and logo.', 'success')
+        return redirect(url_for('admin_branding'))
+    return render_template('admin_branding.html', brand=brand)
+
+
+@app.route('/admin/backup')
+@login_required
+@general_admin_required
+def admin_backup_page():
+    return render_template('admin_backup.html')
+
+
+@app.route('/admin/backup/download')
+@login_required
+@general_admin_required
+def admin_backup_download():
+    """Full backup: SQL dump of all tables + static uploads (logos, invoice evidence)."""
+    import zipfile
+    import json as _json
+    buf = BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+        # Dump every mapped table as JSON (portable across SQLite/Postgres)
+        meta = {'created_at': datetime.utcnow().isoformat() + 'Z', 'tables': {}}
+        for table in db.metadata.sorted_tables:
+            rows = [dict(r) for r in db.session.execute(table.select()).mappings().all()]
+            # stringify non-JSON types
+            clean = []
+            for row in rows:
+                item = {}
+                for k, v in row.items():
+                    if hasattr(v, 'isoformat'):
+                        item[k] = v.isoformat()
+                    elif isinstance(v, Decimal):
+                        item[k] = str(v)
+                    else:
+                        item[k] = v
+                clean.append(item)
+            meta['tables'][table.name] = clean
+            zf.writestr(f'data/{table.name}.json', _json.dumps(clean, ensure_ascii=False, indent=2))
+        zf.writestr('manifest.json', _json.dumps({
+            'app': 'CONTRAconnect',
+            'created_at': meta['created_at'],
+            'table_count': len(meta['tables']),
+            'row_counts': {t: len(r) for t, r in meta['tables'].items()},
+        }, indent=2))
+        # Include uploaded files
+        upload_root = os.path.join(app.root_path, 'static', 'uploads')
+        if os.path.isdir(upload_root):
+            for root, _dirs, files in os.walk(upload_root):
+                for name in files:
+                    full = os.path.join(root, name)
+                    arc = os.path.relpath(full, app.root_path)
+                    zf.write(full, arc)
+        # Branding icons optional
+        icons = os.path.join(app.root_path, 'static', 'icons')
+        if os.path.isdir(icons):
+            for name in os.listdir(icons):
+                full = os.path.join(icons, name)
+                if os.path.isfile(full):
+                    zf.write(full, f'static/icons/{name}')
+    buf.seek(0)
+    fname = f'CONTRAconnect_backup_{datetime.utcnow().strftime("%Y%m%d_%H%M%S")}.zip'
+    return send_file(buf, as_attachment=True, download_name=fname, mimetype='application/zip')
+
+
+@app.route('/admin/backup/restore', methods=['POST'])
+@login_required
+@general_admin_required
+def admin_backup_restore():
+    """Restore from a backup zip produced by this app. Replaces table data."""
+    import zipfile
+    import json as _json
+    f = request.files.get('backup_file')
+    if not f or not f.filename.endswith('.zip'):
+        flash('Please upload a CONTRAconnect backup .zip file.', 'danger')
+        return redirect(url_for('admin_backup_page'))
+    try:
+        data = f.read()
+        zf = zipfile.ZipFile(BytesIO(data))
+        # Restore uploads first
+        for name in zf.namelist():
+            if name.startswith('static/uploads/') and not name.endswith('/'):
+                target = os.path.join(app.root_path, name)
+                os.makedirs(os.path.dirname(target), exist_ok=True)
+                with open(target, 'wb') as out:
+                    out.write(zf.read(name))
+        # Restore tables in FK-safe order (metadata sorted_tables is dependency order)
+        if not request.form.get('confirm') == 'RESTORE':
+            flash('Type RESTORE in the confirmation box to proceed.', 'warning')
+            return redirect(url_for('admin_backup_page'))
+        # Disable FK checks where possible
+        bind = db.session.get_bind()
+        dialect = bind.dialect.name if bind else 'sqlite'
+        if dialect == 'sqlite':
+            db.session.execute(db.text('PRAGMA foreign_keys=OFF'))
+        for table in reversed(list(db.metadata.sorted_tables)):
+            db.session.execute(table.delete())
+        db.session.commit()
+        for table in db.metadata.sorted_tables:
+            path_in_zip = f'data/{table.name}.json'
+            if path_in_zip not in zf.namelist():
+                continue
+            rows = _json.loads(zf.read(path_in_zip))
+            if not rows:
+                continue
+            # Insert in batches
+            db.session.execute(table.insert(), rows)
+        db.session.commit()
+        if dialect == 'sqlite':
+            db.session.execute(db.text('PRAGMA foreign_keys=ON'))
+            db.session.commit()
+        flash('Backup restored successfully. Please sign in again if sessions were reset.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        app.logger.exception('Restore failed')
+        flash(f'Restore failed: {e}', 'danger')
+    return redirect(url_for('admin_backup_page'))
+
+
+
 # ---------------------------------------------------------------------------
 # API endpoints for charts (JSON)
 # ---------------------------------------------------------------------------
@@ -1825,6 +2817,10 @@ def seed_data():
         full_name='General Administrator',
         role='general_admin',
         is_active=True,
+        onboarding_status='active',
+        must_complete_onboarding=False,
+        role_confirmed=True,
+        ethics_accepted=True,
     )
     admin.set_password(admin_pw)
     db.session.add(admin)
@@ -1853,6 +2849,28 @@ def seed_data():
         city='Pilot City', contact_person='', phone='', target_clients_monthly=80, is_active=True,
     )
     db.session.add_all([fac1, fac2, fac3])
+    db.session.commit()
+
+    # Programme staff accounts (change passwords after first login)
+    staff_pw = os.environ.get('STAFF_PASSWORD', 'Staff@2026!')
+    staff = [
+        ('pm@contraconnect.local', 'Project Manager', 'project_manager', 'Project Manager NPSA 10'),
+        ('finance@contraconnect.local', 'Financial Analyst', 'finance_analyst', 'Financial Analyst NPSA 8'),
+        ('rh@contraconnect.local', 'RH Consultant', 'rh_consultant', 'Reproductive Health Consultant'),
+        ('mel@contraconnect.local', 'MEL Consultant', 'mel_consultant', 'Monitoring, Evaluation and Learning Consultant'),
+        ('demand@contraconnect.local', 'Demand Generation Consultant', 'demand_consultant', 'Demand Generation Consultant'),
+        ('sdoc@contraconnect.local', 'SDOC Consultant', 'sdoc_consultant', 'Service Delivery Operations Coordination Consultant'),
+        ('logistics@contraconnect.local', 'Logistics Consultant', 'logistics_consultant', 'Logistics & Supply Consultant'),
+    ]
+    for email, name, role, title in staff:
+        if not User.query.filter_by(email=email).first():
+            u = User(
+                email=email, full_name=name, role=role, staff_title=title, is_active=True,
+                onboarding_status='active', must_complete_onboarding=False,
+                role_confirmed=True, ethics_accepted=True,
+            )
+            u.set_password(staff_pw)
+            db.session.add(u)
     db.session.commit()
 
     # Optional demo data only when explicitly enabled
@@ -1897,6 +2915,29 @@ def init_db():
     db.create_all()
     seed_data()
     print('Database initialized.')
+
+
+
+@app.route('/.well-known/assetlinks.json')
+def assetlinks():
+    """Digital Asset Links for Android TWA / Play Store. Replace package_name and sha256 after you build the Android package."""
+    import json
+    data = [{
+        "relation": ["delegate_permission/common.handle_all_urls"],
+        "target": {
+            "namespace": "android_app",
+            "package_name": os.environ.get('ANDROID_PACKAGE_NAME', 'com.contraconnect.app'),
+            "sha256_cert_fingerprints": [
+                os.environ.get('ANDROID_SHA256', 'REPLACE_WITH_YOUR_UPLOAD_KEY_SHA256')
+            ]
+        }
+    }]
+    return app.response_class(json.dumps(data), mimetype='application/json')
+
+
+@app.route('/static/manifest.json')
+def web_manifest():
+    return app.send_static_file('manifest.json')
 
 
 if __name__ == '__main__':

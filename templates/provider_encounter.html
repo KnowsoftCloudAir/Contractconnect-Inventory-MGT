@@ -41,6 +41,47 @@
                     </select>
                 </div>
 
+                <div class="col-12"><hr class="my-1"><span class="text-muted small fw-semibold">Client details (care panel)</span></div>
+                <div class="col-md-3">
+                    <label class="form-label">Client code / ID</label>
+                    <input type="text" name="client_code" class="form-control" placeholder="Site anonymous code">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Sex</label>
+                    <select name="client_sex" class="form-select">
+                        <option value="">—</option>
+                        <option>Female</option>
+                        <option>Male</option>
+                        <option>Other</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Residence / area</label>
+                    <input type="text" name="client_residence" class="form-control">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Phone (optional)</label>
+                    <input type="text" name="client_phone" class="form-control">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Satisfaction (1–5)</label>
+                    <select name="satisfaction_score" class="form-select">
+                        <option value="">—</option>
+                        <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option>
+                    </select>
+                </div>
+                <div class="col-md-9">
+                    <label class="form-label">Patient testimony / feedback</label>
+                    <textarea name="patient_testimony" class="form-control" rows="2" placeholder="Client’s own words (only share in reports if consent is ticked)"></textarea>
+                </div>
+                <div class="col-12">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="consent_to_share_story" id="consentStory" value="1">
+                        <label class="form-check-label" for="consentStory">Client consents to share this feedback in programme reports (anonymised)</label>
+                    </div>
+                </div>
+
+
                 <div class="col-md-4">
                     <label class="form-label">Method Offered</label>
                     <input type="text" name="method_offered" class="form-control" list="methods">

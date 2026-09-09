@@ -4,7 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}CONTRAconnect{% endblock %}</title>
+    <meta name="theme-color" content="#0d6e6e">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="CONTRAconnect">
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/icons/favicon-16.png">
+    <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/app.css') }}" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
     <style>
@@ -41,7 +51,7 @@
     {% block extra_css %}{% endblock %}
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark sticky-top">
+    <nav class="navbar navbar-expand-lg navbar-dark sticky-top navbar-cc">
         <div class="container-fluid">
             <a class="navbar-brand fw-bold" href="{{ url_for('index') }}">
                 <i class="bi bi-heart-pulse"></i> CONTRAconnect
@@ -53,10 +63,14 @@
                 <ul class="navbar-nav ms-auto align-items-lg-center">
                     {% if current_user.is_authenticated %}
                     <li class="nav-item me-3">
-                        <span class="navbar-text text-white-50">
-                            <i class="bi bi-person-circle"></i>
-                            {{ current_user.full_name }}
-                            <span class="badge bg-light text-dark ms-1">{{ current_user.role }}</span>
+                        <span class="navbar-text text-white d-flex align-items-center gap-2">
+                            {% if current_user.profile_photo %}
+                            <img src="{{ url_for('static', filename=current_user.profile_photo) }}" class="avatar-sm" alt="">
+                            {% else %}
+                            <i class="bi bi-person-circle fs-5"></i>
+                            {% endif %}
+                            <span>{{ current_user.full_name }}
+                            <span class="badge bg-light text-dark ms-1">{{ current_user.role_label if current_user.role_label is defined else current_user.role }}</span></span>
                         </span>
                     </li>
                     <li class="nav-item">
@@ -85,39 +99,42 @@
     <div class="container-fluid">
         <div class="row">
             {% if current_user.is_authenticated %}
-            <nav class="col-md-2 d-none d-md-block sidebar py-3">
+            <nav class="col-md-2 d-none d-md-block sidebar sidebar-cc py-3">
                 <ul class="nav flex-column">
-                    {% if current_user.role in ['general_admin', 'program_admin', 'finance_admin', 'admin'] %}
-                    {% if current_user.role != 'finance_admin' %}
-                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_dashboard' %}active{% endif %}" href="{{ url_for('admin_dashboard') }}"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
+                    {% if current_user.role != 'provider' %}
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'staff_dashboard' %}active{% endif %}" href="{{ url_for('staff_dashboard') }}"><i class="bi bi-house"></i> My workspace</a></li>
+                    {% if current_user.role not in ['finance_analyst', 'finance_admin'] %}
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_dashboard' %}active{% endif %}" href="{{ url_for('admin_dashboard') }}"><i class="bi bi-speedometer2"></i> Ops dashboard</a></li>
                     {% endif %}
-                    {% if current_user.role in ['general_admin', 'finance_admin', 'admin', 'program_admin'] %}
-                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_costs' %}active{% endif %}" href="{{ url_for('admin_costs') }}"><i class="bi bi-cash-stack"></i> Cost Analytics</a></li>
+                    {% if current_user.role in ['finance_analyst', 'finance_admin', 'general_admin', 'admin', 'project_manager', 'program_admin'] %}
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_costs' %}active{% endif %}" href="{{ url_for('admin_costs') }}"><i class="bi bi-cash-stack"></i> Cost analytics</a></li>
                     {% endif %}
-                    {% if current_user.role != 'finance_admin' %}
-                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_facilities' %}active{% endif %}" href="{{ url_for('admin_facilities') }}"><i class="bi bi-building"></i> Facilities</a></li>
+                    {% if current_user.role not in ['finance_analyst', 'finance_admin'] or current_user.role in ['finance_analyst', 'general_admin'] %}
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint in ['admin_facilities','admin_facility_detail'] %}active{% endif %}" href="{{ url_for('admin_facilities') }}"><i class="bi bi-building"></i> Facilities</a></li>
+                    {% endif %}
+                    {% if current_user.role in ['project_manager','rh_consultant','logistics_consultant','sdoc_consultant','general_admin','admin','program_admin','mel_consultant'] %}
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_products' %}active{% endif %}" href="{{ url_for('admin_products') }}"><i class="bi bi-box-seam"></i> Products</a></li>
-                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_dispatch' %}active{% endif %}" href="{{ url_for('admin_dispatch') }}"><i class="bi bi-truck"></i> Dispatch Stock</a></li>
-                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_requests' %}active{% endif %}" href="{{ url_for('admin_requests') }}"><i class="bi bi-clipboard-check"></i> Requests</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_dispatch' %}active{% endif %}" href="{{ url_for('admin_dispatch') }}"><i class="bi bi-truck"></i> Dispatch</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_requests' %}active{% endif %}" href="{{ url_for('admin_requests') }}"><i class="bi bi-clipboard-check"></i> Stock requests</a></li>
                     {% endif %}
-                    {% if current_user.role in ['general_admin', 'finance_admin', 'admin'] %}
+                    {% if current_user.role in ['finance_analyst','finance_admin','general_admin','admin'] %}
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_expenditures' %}active{% endif %}" href="{{ url_for('admin_expenditures') }}"><i class="bi bi-journal-text"></i> Ledgers</a></li>
                     <li class="nav-item"><a class="nav-link" href="{{ url_for('export_financial_excel', days=90) }}"><i class="bi bi-file-earmark-excel"></i> Export financial</a></li>
                     {% endif %}
-                    {% if current_user.role != 'finance_admin' %}
-                    <li class="nav-item"><a class="nav-link" href="{{ url_for('export_full_excel') }}"><i class="bi bi-download"></i> Export full data</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint in ['invoice_list','invoice_detail','invoice_new'] %}active{% endif %}" href="{{ url_for('invoice_list') }}"><i class="bi bi-receipt"></i> Payment invoices</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('admin_period_report', period='monthly', fmt='pdf') }}"><i class="bi bi-file-earmark-bar-graph"></i> Reports</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('admin_period_report', period='programmatic', fmt='pptx') }}"><i class="bi bi-filetype-ppt"></i> Programmatic PPT</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_branding' %}active{% endif %}" href="{{ url_for('admin_branding') }}"><i class="bi bi-palette"></i> Report branding</a></li>
+                    {% if current_user.role in ['general_admin', 'admin', 'project_manager'] %}
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_homepage_editor' %}active{% endif %}" href="{{ url_for('admin_homepage_editor') }}"><i class="bi bi-window"></i> Public homepage</a></li>
                     {% endif %}
-                    <li class="nav-item dropdown">
-                        <a class="nav-link" href="#"><i class="bi bi-file-earmark-bar-graph"></i> Reports</a>
-                    </li>
-                    <li class="nav-item ps-3"><a class="nav-link py-1" href="{{ url_for('admin_period_report', period='monthly', fmt='pdf') }}"><i class="bi bi-filetype-pdf"></i> Monthly PDF</a></li>
-                    <li class="nav-item ps-3"><a class="nav-link py-1" href="{{ url_for('admin_period_report', period='monthly', fmt='pptx') }}"><i class="bi bi-filetype-ppt"></i> Monthly PPT</a></li>
-                    <li class="nav-item ps-3"><a class="nav-link py-1" href="{{ url_for('admin_period_report', period='quarterly', fmt='pdf') }}"><i class="bi bi-filetype-pdf"></i> Quarterly PDF</a></li>
-                    <li class="nav-item ps-3"><a class="nav-link py-1" href="{{ url_for('admin_period_report', period='quarterly', fmt='pptx') }}"><i class="bi bi-filetype-ppt"></i> Quarterly PPT</a></li>
-                    <li class="nav-item ps-3"><a class="nav-link py-1" href="{{ url_for('admin_period_report', period='yearly', fmt='pdf') }}"><i class="bi bi-filetype-pdf"></i> Yearly PDF</a></li>
-                    <li class="nav-item ps-3"><a class="nav-link py-1" href="{{ url_for('admin_period_report', period='yearly', fmt='pptx') }}"><i class="bi bi-filetype-ppt"></i> Yearly PPT</a></li>
-                    {% if current_user.role in ['general_admin', 'admin'] %}
-                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_manage_users' %}active{% endif %}" href="{{ url_for('admin_manage_users') }}"><i class="bi bi-people-fill"></i> Admin rights</a></li>
+                    {% if current_user.role in ['general_admin', 'admin', 'project_manager'] %}
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_backup_page' %}active{% endif %}" href="{{ url_for('admin_backup_page') }}"><i class="bi bi-cloud-arrow-down"></i> Backup &amp; restore</a></li>
+                    {% endif %}
+                    {% if current_user.role in ['general_admin', 'admin', 'project_manager'] %}
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_manage_users' %}active{% endif %}" href="{{ url_for('admin_manage_users') }}"><i class="bi bi-people-fill"></i> Staff rights</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_staff_approvals' %}active{% endif %}" href="{{ url_for('admin_staff_approvals') }}"><i class="bi bi-person-check"></i> Staff approvals</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_activity' %}active{% endif %}" href="{{ url_for('admin_activity') }}"><i class="bi bi-footprint"></i> Activity monitor</a></li>
                     {% endif %}
                     {% else %}
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'provider_dashboard' %}active{% endif %}" href="{{ url_for('provider_dashboard') }}"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
@@ -149,11 +166,20 @@
         </div>
     </div>
 
-    <footer class="text-center py-3 border-top bg-white mt-4">
+    <footer class="text-center py-3 cc-footer mt-4">
         CONTRAconnect &copy; 2026 &mdash; Commodity + Cost Analytics for Contraceptive Services
     </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     {% block extra_js %}{% endblock %}
+    <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('/static/js/sw.js').catch(function (e) {
+          console.warn('SW registration failed', e);
+        });
+      });
+    }
+    </script>
 </body>
 </html>
