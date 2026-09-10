@@ -70,6 +70,16 @@ except Exception:
 
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
+
+@app.context_processor
+def inject_branding():
+    try:
+        b = report_branding()
+    except Exception:
+        b = {'app_name': 'CONTRAconnect', 'app_logo': ''}
+    return {'app_brand': b}
+
+
 login_manager.login_view = 'login'
 login_manager.login_message_category = 'warning'
 
@@ -108,6 +118,7 @@ def ensure_db():
         db.create_all()
         if not User.query.filter(User.role.in_(['general_admin', 'admin'])).first():
             seed_data()
+        ensure_expense_codes()
         _db_ready = True
     except Exception as e:
         app.logger.exception('ensure_db failed: %s', e)
@@ -447,6 +458,74 @@ class PasswordResetToken(db.Model):
     user = db.relationship('User')
 
 
+
+class ExpenseCode(db.Model):
+    """Chart of accounts / expense codes for project cost claims."""
+    __tablename__ = 'expense_codes'
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(30), unique=True, nullable=False)
+    category = db.Column(db.String(80), nullable=False)
+    description = db.Column(db.String(255), nullable=False)
+    is_active = db.Column(db.Boolean, default=True)
+
+    budget_lines = db.relationship('BudgetLine', back_populates='expense_code')
+    expense_requests = db.relationship('ExpenseRequest', back_populates='expense_code')
+
+
+class BudgetLine(db.Model):
+    """Budget allocation per expense code for a fiscal period."""
+    __tablename__ = 'budget_lines'
+    id = db.Column(db.Integer, primary_key=True)
+    expense_code_id = db.Column(db.Integer, db.ForeignKey('expense_codes.id'), nullable=False)
+    fiscal_year = db.Column(db.String(20), default='2026')
+    period_label = db.Column(db.String(40), default='Pilot')  # Pilot / Scale-up / Annual
+    budget_amount = db.Column(db.Numeric(14, 2), nullable=False, default=0)
+    variance_narration = db.Column(db.Text)
+    updated_by = db.Column(db.Integer, db.ForeignKey('users.id'))
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    expense_code = db.relationship('ExpenseCode', back_populates='budget_lines')
+
+
+class ExpenseRequest(db.Model):
+    """Project cost claim: submit → finance review → PM approve → finance pay."""
+    __tablename__ = 'expense_requests'
+    id = db.Column(db.Integer, primary_key=True)
+    request_number = db.Column(db.String(40), unique=True, nullable=False)
+    requester_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    expense_code_id = db.Column(db.Integer, db.ForeignKey('expense_codes.id'), nullable=False)
+    # Auto from code
+    category = db.Column(db.String(80), nullable=False)
+    description = db.Column(db.Text, nullable=False)
+    amount = db.Column(db.Numeric(14, 2), nullable=False)
+    currency = db.Column(db.String(10), default='USD')
+    payee_name = db.Column(db.String(150), nullable=False)
+    bank_name = db.Column(db.String(120))
+    account_number = db.Column(db.String(60))
+    account_name = db.Column(db.String(150))
+    evidence_notes = db.Column(db.Text)
+    evidence_filename = db.Column(db.String(255))
+    # Workflow: draft | submitted | finance_review | finance_rejected | pm_approved | pm_rejected | paid
+    status = db.Column(db.String(40), default='draft')
+    finance_reviewer_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    finance_reviewed_at = db.Column(db.DateTime)
+    finance_notes = db.Column(db.Text)
+    pm_approver_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    pm_approved_at = db.Column(db.DateTime)
+    pm_notes = db.Column(db.Text)
+    paid_by_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    paid_at = db.Column(db.DateTime)
+    voucher_number = db.Column(db.String(40))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    requester = db.relationship('User', foreign_keys=[requester_id])
+    expense_code = db.relationship('ExpenseCode', back_populates='expense_requests')
+    finance_reviewer = db.relationship('User', foreign_keys=[finance_reviewer_id])
+    pm_approver = db.relationship('User', foreign_keys=[pm_approver_id])
+    paid_by = db.relationship('User', foreign_keys=[paid_by_id])
+
+
 class AppSetting(db.Model):
     """Key-value settings including report branding and logos."""
     __tablename__ = 'app_settings'
@@ -479,7 +558,46 @@ def report_branding():
         'report_subtitle': get_setting('report_subtitle', 'CONTRAconnect — UNDP Supported Programme'),
         'logo_path': get_setting('report_logo_path', ''),  # relative under static/
         'org_line': get_setting('org_line', 'United Nations Development Programme (UNDP)'),
+        'app_name': get_setting('app_name', 'CONTRAconnect'),
+        'app_logo': get_setting('app_logo_path', ''),
     }
+
+
+def amount_in_words(amount):
+    """Simple English words for money amounts (USD/NGN style)."""
+    try:
+        amount = float(amount)
+    except Exception:
+        return str(amount)
+    ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
+            'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen',
+            'Seventeen', 'Eighteen', 'Nineteen']
+    tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety']
+
+    def under_1000(n):
+        n = int(n)
+        if n < 20:
+            return ones[n]
+        if n < 100:
+            return (tens[n // 10] + (' ' + ones[n % 10] if n % 10 else '')).strip()
+        return (ones[n // 100] + ' Hundred' + (' and ' + under_1000(n % 100) if n % 100 else '')).strip()
+
+    whole = int(amount)
+    cents = int(round((amount - whole) * 100))
+    if whole == 0:
+        words = 'Zero'
+    elif whole < 1000:
+        words = under_1000(whole)
+    elif whole < 1000000:
+        words = under_1000(whole // 1000) + ' Thousand' + (' ' + under_1000(whole % 1000) if whole % 1000 else '')
+    else:
+        words = under_1000(whole // 1000000) + ' Million' + (
+            ' ' + under_1000((whole % 1000000) // 1000) + ' Thousand' if (whole % 1000000) // 1000 else ''
+        ) + (' ' + under_1000(whole % 1000) if whole % 1000 else '')
+    words = words.strip() + ' only'
+    if cents:
+        words = words.replace(' only', f' and {cents:02d}/100 only')
+    return words
 
 
 # ---------------------------------------------------------------------------
@@ -2449,6 +2567,338 @@ def admin_activity():
 
 
 
+
+# ---------------------------------------------------------------------------
+# Expense requests, budget, variance, payment vouchers
+# ---------------------------------------------------------------------------
+def _can_review_expense(role):
+    return role in ('finance_analyst', 'finance_admin', 'general_admin', 'admin')
+
+
+def _can_approve_expense_pm(role):
+    return role in ('project_manager', 'program_admin', 'general_admin', 'admin')
+
+
+@app.route('/api/expense-code/<int:cid>')
+@login_required
+def api_expense_code(cid):
+    c = db.session.get(ExpenseCode, cid)
+    if not c:
+        return jsonify({}), 404
+    return jsonify({'id': c.id, 'code': c.code, 'category': c.category, 'description': c.description})
+
+
+@app.route('/expenses')
+@login_required
+def expense_list():
+    if current_user.role == 'provider':
+        flash('Expense claims are for programme staff.', 'warning')
+        return redirect(url_for('provider_dashboard'))
+    q = ExpenseRequest.query.order_by(ExpenseRequest.created_at.desc())
+    if not (_can_review_expense(current_user.role) or _can_approve_expense_pm(current_user.role)):
+        q = q.filter_by(requester_id=current_user.id)
+    items = q.limit(200).all()
+    return render_template('expense_list.html', items=items)
+
+
+@app.route('/expenses/new', methods=['GET', 'POST'])
+@login_required
+def expense_new():
+    if current_user.role == 'provider':
+        flash('Not available for service-provider accounts.', 'warning')
+        return redirect(url_for('provider_dashboard'))
+    codes = ExpenseCode.query.filter_by(is_active=True).order_by(ExpenseCode.code).all()
+    if request.method == 'POST':
+        code_id = int(request.form.get('expense_code_id'))
+        code = db.session.get(ExpenseCode, code_id)
+        if not code:
+            flash('Select a valid expense code.', 'danger')
+            return redirect(url_for('expense_new'))
+        try:
+            amount = Decimal(request.form.get('amount', '0'))
+        except Exception:
+            flash('Invalid amount.', 'danger')
+            return redirect(url_for('expense_new'))
+        if amount <= 0:
+            flash('Amount must be positive.', 'danger')
+            return redirect(url_for('expense_new'))
+        action = request.form.get('action', 'draft')
+        num = f"EXP-{datetime.utcnow().strftime('%Y%m%d')}-{current_user.id}-{int(datetime.utcnow().timestamp()) % 10000}"
+        er = ExpenseRequest(
+            request_number=num,
+            requester_id=current_user.id,
+            expense_code_id=code.id,
+            category=code.category,
+            description=request.form.get('description', '').strip() or code.description,
+            amount=amount,
+            currency=request.form.get('currency', 'USD'),
+            payee_name=request.form.get('payee_name', '').strip() or current_user.full_name,
+            bank_name=request.form.get('bank_name', '').strip(),
+            account_number=request.form.get('account_number', '').strip(),
+            account_name=request.form.get('account_name', '').strip(),
+            evidence_notes=request.form.get('evidence_notes', '').strip(),
+            status='submitted' if action == 'submit' else 'draft',
+        )
+        f = request.files.get('evidence_file')
+        if f and f.filename:
+            safe = f"{num}_{f.filename.replace(' ', '_')[:80]}"
+            d = os.path.join(app.root_path, 'static', 'uploads', 'expenses')
+            os.makedirs(d, exist_ok=True)
+            f.save(os.path.join(d, safe))
+            er.evidence_filename = safe
+        db.session.add(er)
+        db.session.commit()
+        log_activity('expense_submitted', er.request_number)
+        flash(f'Expense {er.request_number} saved ({er.status}).', 'success')
+        return redirect(url_for('expense_detail', eid=er.id))
+    return render_template('expense_form.html', codes=codes)
+
+
+@app.route('/expenses/<int:eid>')
+@login_required
+def expense_detail(eid):
+    er = db.session.get(ExpenseRequest, eid)
+    if not er:
+        abort(404)
+    if er.requester_id != current_user.id and not (
+        _can_review_expense(current_user.role) or _can_approve_expense_pm(current_user.role)
+    ):
+        abort(403)
+    return render_template('expense_detail.html', er=er)
+
+
+@app.route('/expenses/<int:eid>/submit', methods=['POST'])
+@login_required
+def expense_submit(eid):
+    er = db.session.get(ExpenseRequest, eid)
+    if not er or er.requester_id != current_user.id or er.status != 'draft':
+        flash('Only your draft requests can be submitted.', 'warning')
+        return redirect(url_for('expense_list'))
+    er.status = 'submitted'
+    db.session.commit()
+    flash('Submitted for Finance review.', 'success')
+    return redirect(url_for('expense_detail', eid=eid))
+
+
+@app.route('/expenses/<int:eid>/finance-review', methods=['POST'])
+@login_required
+def expense_finance_review(eid):
+    if not _can_review_expense(current_user.role):
+        flash('Finance review privilege required.', 'danger')
+        return redirect(url_for('expense_detail', eid=eid))
+    er = db.session.get(ExpenseRequest, eid)
+    if not er or er.status != 'submitted':
+        flash('Not awaiting finance review.', 'warning')
+        return redirect(url_for('expense_list'))
+    er.finance_notes = request.form.get('finance_notes', '').strip()
+    er.finance_reviewer_id = current_user.id
+    er.finance_reviewed_at = datetime.utcnow()
+    if request.form.get('decision') == 'approve':
+        er.status = 'finance_review'
+        flash('Cleared for Project Manager approval.', 'success')
+    else:
+        er.status = 'finance_rejected'
+        flash('Expense rejected by Finance.', 'warning')
+    db.session.commit()
+    return redirect(url_for('expense_detail', eid=eid))
+
+
+@app.route('/expenses/<int:eid>/pm-approve', methods=['POST'])
+@login_required
+def expense_pm_approve(eid):
+    if not _can_approve_expense_pm(current_user.role):
+        flash('Project Manager approval privilege required.', 'danger')
+        return redirect(url_for('expense_detail', eid=eid))
+    er = db.session.get(ExpenseRequest, eid)
+    if not er or er.status != 'finance_review':
+        flash('Must pass Finance review first.', 'warning')
+        return redirect(url_for('expense_list'))
+    er.pm_notes = request.form.get('pm_notes', '').strip()
+    er.pm_approver_id = current_user.id
+    er.pm_approved_at = datetime.utcnow()
+    if request.form.get('decision') == 'approve':
+        er.status = 'pm_approved'
+        flash('Approved. Finance can now pay and issue voucher.', 'success')
+    else:
+        er.status = 'pm_rejected'
+        flash('Rejected by Project Manager.', 'warning')
+    db.session.commit()
+    return redirect(url_for('expense_detail', eid=eid))
+
+
+@app.route('/expenses/<int:eid>/mark-paid', methods=['POST'])
+@login_required
+def expense_mark_paid(eid):
+    if not _can_review_expense(current_user.role):
+        flash('Only Finance can mark paid.', 'danger')
+        return redirect(url_for('expense_detail', eid=eid))
+    er = db.session.get(ExpenseRequest, eid)
+    if not er or er.status != 'pm_approved':
+        flash('Only PM-approved expenses can be paid.', 'warning')
+        return redirect(url_for('expense_list'))
+    er.status = 'paid'
+    er.paid_by_id = current_user.id
+    er.paid_at = datetime.utcnow()
+    er.voucher_number = er.voucher_number or f"PV-{datetime.utcnow().strftime('%Y%m%d')}-{er.id}"
+    # Post to ledger under expense category
+    db.session.add(Expenditure(
+        facility_id=None,
+        category=er.category,
+        description=f"{er.request_number} / {er.expense_code.code}: {er.description[:120]}",
+        amount=er.amount,
+        expenditure_date=datetime.utcnow().date(),
+        is_platform_cost=(er.expense_code.code.startswith('EXP-PLT')),
+        created_by=current_user.id,
+    ))
+    db.session.commit()
+    log_activity('expense_paid', er.request_number)
+    flash('Marked paid and posted to budget actuals. Download the payment voucher.', 'success')
+    return redirect(url_for('expense_voucher_pdf', eid=eid))
+
+
+@app.route('/expenses/<int:eid>/voucher.pdf')
+@login_required
+def expense_voucher_pdf(eid):
+    er = db.session.get(ExpenseRequest, eid)
+    if not er:
+        abort(404)
+    if er.requester_id != current_user.id and not (
+        _can_review_expense(current_user.role) or _can_approve_expense_pm(current_user.role)
+    ):
+        abort(403)
+    brand = report_branding()
+    buf = BytesIO()
+    from reportlab.lib.pagesizes import A4
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=0.6*inch, rightMargin=0.6*inch,
+                            topMargin=0.5*inch, bottomMargin=0.5*inch)
+    styles = getSampleStyleSheet()
+    title = ParagraphStyle('VT', parent=styles['Heading1'], textColor=colors.HexColor('#0b6e6e'), fontSize=16)
+    story = []
+    story.append(Paragraph(brand.get('app_name', 'CONTRAconnect'), title))
+    story.append(Paragraph(brand.get('programme_title', 'Benin City Mayor Challenge'), styles['Heading2']))
+    story.append(Paragraph('<b>PAYMENT VOUCHER</b>', styles['Heading2']))
+    story.append(Spacer(1, 8))
+    data = [
+        ['Voucher No.', er.voucher_number or '—', 'Request No.', er.request_number],
+        ['Date', (er.paid_at or er.updated_at or datetime.utcnow()).strftime('%Y-%m-%d'), 'Status', er.status],
+        ['Expense code', er.expense_code.code if er.expense_code else '—', 'Category', er.category],
+        ['Payee', er.payee_name, 'Currency', er.currency],
+        ['Amount (figures)', f'{float(er.amount):,.2f}', 'Amount (words)', amount_in_words(er.amount)],
+        ['Bank', er.bank_name or '—', 'Account', f'{er.account_name or "—"} / {er.account_number or "—"}'],
+        ['Requester', er.requester.full_name if er.requester else '—', 'Submitted', er.created_at.strftime('%Y-%m-%d') if er.created_at else '—'],
+        ['Finance reviewer', er.finance_reviewer.full_name if er.finance_reviewer else '—',
+         'Reviewed', er.finance_reviewed_at.strftime('%Y-%m-%d') if er.finance_reviewed_at else '—'],
+        ['Approved by (PM)', er.pm_approver.full_name if er.pm_approver else '—',
+         'Approved', er.pm_approved_at.strftime('%Y-%m-%d') if er.pm_approved_at else '—'],
+        ['Paid by', er.paid_by.full_name if er.paid_by else '—',
+         'Paid on', er.paid_at.strftime('%Y-%m-%d') if er.paid_at else '—'],
+    ]
+    t = Table(data, colWidths=[1.3*inch, 2.2*inch, 1.3*inch, 2.2*inch])
+    t.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#e6f4f4')),
+        ('BACKGROUND', (2, 0), (2, -1), colors.HexColor('#e6f4f4')),
+        ('GRID', (0, 0), (-1, -1), 0.4, colors.grey),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+    ]))
+    story.append(t)
+    story.append(Spacer(1, 12))
+    story.append(Paragraph('<b>Expense description / breakdown</b>', styles['Heading3']))
+    story.append(Paragraph((er.description or '').replace('\n', '<br/>'), styles['Normal']))
+    if er.expense_code:
+        story.append(Paragraph(f"Code description: {er.expense_code.description}", styles['Normal']))
+    if er.finance_notes:
+        story.append(Paragraph(f"Finance notes: {er.finance_notes}", styles['Normal']))
+    if er.pm_notes:
+        story.append(Paragraph(f"PM notes: {er.pm_notes}", styles['Normal']))
+    story.append(Spacer(1, 24))
+    story.append(Paragraph('_________________________&nbsp;&nbsp;&nbsp;&nbsp;_________________________&nbsp;&nbsp;&nbsp;&nbsp;_________________________', styles['Normal']))
+    story.append(Paragraph('Requester&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Finance&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Project Manager', styles['Normal']))
+    doc.build(story)
+    buf.seek(0)
+    return send_file(buf, as_attachment=True,
+                     download_name=f"PaymentVoucher_{er.voucher_number or er.request_number}.pdf",
+                     mimetype='application/pdf')
+
+
+@app.route('/admin/budget', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def admin_budget():
+    """Finance budget template: amounts + variance narration per expense code."""
+    if not _can_review_expense(current_user.role) and current_user.role not in ('project_manager', 'general_admin', 'admin'):
+        flash('Budget access restricted.', 'danger')
+        return redirect(url_for('index'))
+    fy = request.args.get('fy', '2026')
+    period = request.args.get('period', 'Pilot')
+    codes = ExpenseCode.query.filter_by(is_active=True).order_by(ExpenseCode.code).all()
+    if request.method == 'POST' and _can_review_expense(current_user.role):
+        fy = request.form.get('fiscal_year', fy)
+        period = request.form.get('period_label', period)
+        for c in codes:
+            amt = request.form.get(f'budget_{c.id}', '').strip()
+            narr = request.form.get(f'narr_{c.id}', '').strip()
+            try:
+                budget_amt = Decimal(amt) if amt else Decimal('0')
+            except Exception:
+                budget_amt = Decimal('0')
+            line = BudgetLine.query.filter_by(expense_code_id=c.id, fiscal_year=fy, period_label=period).first()
+            if not line:
+                line = BudgetLine(expense_code_id=c.id, fiscal_year=fy, period_label=period)
+                db.session.add(line)
+            line.budget_amount = budget_amt
+            line.variance_narration = narr
+            line.updated_by = current_user.id
+        db.session.commit()
+        flash('Budget template saved.', 'success')
+        return redirect(url_for('admin_budget', fy=fy, period=period))
+
+    lines = {bl.expense_code_id: bl for bl in BudgetLine.query.filter_by(fiscal_year=fy, period_label=period).all()}
+    # Actuals from paid expense requests
+    actuals = {}
+    paid = ExpenseRequest.query.filter_by(status='paid').all()
+    for er in paid:
+        actuals[er.expense_code_id] = actuals.get(er.expense_code_id, Decimal('0')) + (er.amount or 0)
+    rows = []
+    for c in codes:
+        bl = lines.get(c.id)
+        budget = float(bl.budget_amount) if bl else 0.0
+        actual = float(actuals.get(c.id, 0))
+        var = budget - actual
+        rows.append({
+            'code': c, 'budget': budget, 'actual': actual, 'variance': var,
+            'narration': bl.variance_narration if bl else '',
+            'line': bl,
+        })
+    return render_template('admin_budget.html', rows=rows, fy=fy, period=period,
+                           can_edit=_can_review_expense(current_user.role))
+
+
+@app.route('/admin/budget/variance-report')
+@login_required
+@admin_required
+def budget_variance_report():
+    fy = request.args.get('fy', '2026')
+    period = request.args.get('period', 'Pilot')
+    codes = ExpenseCode.query.filter_by(is_active=True).order_by(ExpenseCode.code).all()
+    lines = {bl.expense_code_id: bl for bl in BudgetLine.query.filter_by(fiscal_year=fy, period_label=period).all()}
+    actuals = {}
+    for er in ExpenseRequest.query.filter_by(status='paid').all():
+        actuals[er.expense_code_id] = actuals.get(er.expense_code_id, Decimal('0')) + (er.amount or 0)
+    rows = []
+    for c in codes:
+        bl = lines.get(c.id)
+        budget = float(bl.budget_amount) if bl else 0.0
+        actual = float(actuals.get(c.id, 0))
+        rows.append({
+            'code': c.code, 'category': c.category, 'description': c.description,
+            'budget': budget, 'actual': actual, 'variance': budget - actual,
+            'narration': (bl.variance_narration if bl else '') or '',
+        })
+    return render_template('budget_variance.html', rows=rows, fy=fy, period=period)
+
+
+
 # ---------------------------------------------------------------------------
 # Staff home + Invoice / payment workflow
 # ---------------------------------------------------------------------------
@@ -2638,6 +3088,261 @@ def invoice_mark_paid(iid):
 
 
 
+
+# ---------------------------------------------------------------------------
+# Editable sample / demo data for all reports
+# ---------------------------------------------------------------------------
+def load_report_sample_data():
+    """Populate realistic sample operational + financial data for dashboards and reports."""
+    import random
+    ensure_expense_codes()
+    admin = User.query.filter(User.role.in_(['general_admin', 'admin', 'project_manager', 'finance_analyst'])).first()
+    products = Product.query.filter_by(is_active=True).all()
+    facilities = Facility.query.filter_by(is_active=True).all()
+    if not products or not facilities:
+        return {'ok': False, 'msg': 'Need products and facilities first (run seed).'}
+
+    # Budget lines with sample budgets
+    codes = ExpenseCode.query.filter_by(is_active=True).all()
+    sample_budgets = {
+        'EXP-STAFF-01': 24528, 'EXP-STAFF-02': 28000, 'EXP-TRAIN-01': 4308, 'EXP-TRAIN-02': 3055,
+        'EXP-LOG-01': 3000, 'EXP-LOG-02': 10000, 'EXP-SBC-01': 9700, 'EXP-SBC-02': 10004,
+        'EXP-COMM-01': 80000, 'EXP-COMM-02': 25000, 'EXP-EQP-01': 24500, 'EXP-EQP-02': 9550,
+        'EXP-OPS-01': 10000, 'EXP-PLT-01': 30000, 'EXP-VND-01': 8000,
+    }
+    for c in codes:
+        bl = BudgetLine.query.filter_by(expense_code_id=c.id, fiscal_year='2026', period_label='Pilot').first()
+        if not bl:
+            bl = BudgetLine(expense_code_id=c.id, fiscal_year='2026', period_label='Pilot')
+            db.session.add(bl)
+        bl.budget_amount = Decimal(str(sample_budgets.get(c.code, 5000)))
+        if not bl.variance_narration:
+            bl.variance_narration = 'Sample narration — replace with finance analysis.'
+
+    # Stock at facilities
+    for fac in facilities:
+        for prod in products:
+            si = StockItem.query.filter_by(facility_id=fac.id, product_id=prod.id).first()
+            qty = random.randint(30, 200) if prod.method_code != 'Condom' else random.randint(200, 800)
+            if not si:
+                si = StockItem(facility_id=fac.id, product_id=prod.id, quantity_on_hand=qty, reorder_level=15)
+                db.session.add(si)
+                db.session.add(StockTransaction(
+                    facility_id=fac.id, product_id=prod.id, transaction_type='receipt',
+                    quantity=qty, unit_cost=prod.unit_cost, reference='SAMPLE-LOAD',
+                    created_by=admin.id if admin else None,
+                ))
+            else:
+                si.quantity_on_hand = max(si.quantity_on_hand, qty)
+
+    # Sample expenditures (ledger)
+    if Expenditure.query.filter(Expenditure.description.like('SAMPLE:%')).count() < 5:
+        samples_exp = [
+            ('staff', 'SAMPLE: Field nurse stipends Q1', 8200, False),
+            ('logistics', 'SAMPLE: Distribution runs — 4 kiosks', 2100, False),
+            ('utilities', 'SAMPLE: Storehouse power & security', 1800, False),
+            ('platform_build', 'SAMPLE: Platform security hardening', 4500, True),
+            ('commodity', 'SAMPLE: Emergency commodity top-up', 6200, False),
+        ]
+        for cat, desc, amt, plat in samples_exp:
+            db.session.add(Expenditure(
+                facility_id=facilities[0].id if not plat else None,
+                category=cat, description=desc, amount=Decimal(str(amt)),
+                expenditure_date=datetime.utcnow().date() - timedelta(days=random.randint(5, 60)),
+                is_platform_cost=plat, created_by=admin.id if admin else None,
+            ))
+
+    # Client encounters with method mix + testimonies
+    methods = [p.method_code for p in products]
+    outcomes = ['accepted', 'accepted', 'accepted', 'refused', 'counselled_only', 'discontinued']
+    age_bands = ['<20', '20-24', '25-29', '30-34', '35+']
+    stories = [
+        ('I received clear counselling and chose a method that fits my family plan.', 5),
+        ('The kiosk was close to the market — I did not lose a full work day.', 5),
+        ('Nurse explained side effects honestly. I felt respected.', 4),
+        ('Stock was available the same day I decided.', 5),
+        ('Mobiliser invited me; the service was free of pressure.', 4),
+    ]
+    existing_sample_enc = ClientEncounter.query.filter(ClientEncounter.client_code.like('SAMP-%')).count()
+    if existing_sample_enc < 40:
+        for i in range(45):
+            fac = random.choice(facilities)
+            prod = random.choice(products)
+            outcome = random.choice(outcomes)
+            day = datetime.utcnow().date() - timedelta(days=random.randint(0, 80))
+            accepted = outcome == 'accepted'
+            story = None
+            consent = False
+            score = None
+            if accepted and random.random() < 0.25:
+                story, score = random.choice(stories)
+                consent = True
+            enc = ClientEncounter(
+                facility_id=fac.id,
+                encounter_date=day,
+                client_age_band=random.choice(age_bands),
+                client_parity=random.choice(['0', '1-2', '3+']),
+                education_level=random.choice(['Primary', 'Secondary', 'Tertiary', 'None']),
+                method_offered=prod.method_code,
+                method_accepted=prod.method_code if accepted else None,
+                outcome=outcome,
+                refusal_reason='Partner opposition' if outcome == 'refused' else None,
+                discontinuation_reason='Side effects' if outcome == 'discontinued' else None,
+                counseling_notes='SAMPLE encounter for reports',
+                client_code=f'SAMP-{1000+i}',
+                client_sex='Female',
+                client_residence=fac.city or 'Benin City',
+                consent_to_share_story=consent,
+                patient_testimony=story,
+                satisfaction_score=score,
+                quantity_dispensed=1 if accepted else 0,
+                product_id=prod.id if accepted else None,
+                created_by=admin.id if admin else None,
+            )
+            db.session.add(enc)
+            if accepted:
+                # stock issue
+                db.session.add(StockTransaction(
+                    facility_id=fac.id, product_id=prod.id, transaction_type='issue',
+                    quantity=1, unit_cost=prod.unit_cost, reference='SAMPLE-ENC',
+                    created_by=admin.id if admin else None,
+                ))
+
+    # Sample paid expenses for variance report
+    if ExpenseRequest.query.filter(ExpenseRequest.request_number.like('SAMPLE-%')).count() < 5:
+        requester = admin
+        for i, c in enumerate(codes[:8]):
+            amt = Decimal(str(random.randint(500, int(float(sample_budgets.get(c.code, 5000)) * 0.4))))
+            er = ExpenseRequest(
+                request_number=f'SAMPLE-EXP-{i+1:03d}',
+                requester_id=requester.id if requester else 1,
+                expense_code_id=c.id,
+                category=c.category,
+                description=f'SAMPLE paid cost against {c.code}',
+                amount=amt,
+                currency='USD',
+                payee_name='Sample Vendor Ltd',
+                status='paid',
+                finance_reviewer_id=requester.id if requester else None,
+                finance_reviewed_at=datetime.utcnow() - timedelta(days=10),
+                pm_approver_id=requester.id if requester else None,
+                pm_approved_at=datetime.utcnow() - timedelta(days=8),
+                paid_by_id=requester.id if requester else None,
+                paid_at=datetime.utcnow() - timedelta(days=5),
+                voucher_number=f'PV-SAMPLE-{i+1:03d}',
+            )
+            db.session.add(er)
+
+    # Homepage stories can stay as CMS; tag settings
+    set_setting('sample_data_loaded_at', datetime.utcnow().isoformat())
+    db.session.commit()
+    return {'ok': True, 'msg': 'Sample report data loaded (encounters, stock, ledgers, budget, paid expenses, testimonies).'}
+
+
+def clear_report_sample_data():
+    """Remove records tagged as SAMPLE so live data is not mixed."""
+    ClientEncounter.query.filter(ClientEncounter.client_code.like('SAMP-%')).delete(synchronize_session=False)
+    Expenditure.query.filter(Expenditure.description.like('SAMPLE:%')).delete(synchronize_session=False)
+    ExpenseRequest.query.filter(ExpenseRequest.request_number.like('SAMPLE-%')).delete(synchronize_session=False)
+    StockTransaction.query.filter(StockTransaction.reference.in_(['SAMPLE-LOAD', 'SAMPLE-ENC'])).delete(synchronize_session=False)
+    db.session.commit()
+    set_setting('sample_data_loaded_at', '')
+    return {'ok': True, 'msg': 'Sample-tagged data cleared. Budget lines and real records kept.'}
+
+
+@app.route('/admin/sample-data', methods=['GET', 'POST'])
+@login_required
+@general_admin_required
+def admin_sample_data():
+    """Load / clear / tweak sample data used by dashboards and all reports."""
+    msg = None
+    if request.method == 'POST':
+        action = request.form.get('action')
+        if action == 'load':
+            result = load_report_sample_data()
+            flash(result['msg'], 'success' if result['ok'] else 'warning')
+        elif action == 'clear':
+            result = clear_report_sample_data()
+            flash(result['msg'], 'info')
+        elif action == 'save_kpis':
+            # Editable KPI overlays stored in settings (optional report footnotes)
+            set_setting('sample_kpi_notes', request.form.get('sample_kpi_notes', '').strip())
+            set_setting('sample_report_disclaimer', request.form.get('sample_report_disclaimer', '').strip())
+            flash('Report notes saved.', 'success')
+        elif action == 'save_testimony':
+            # Quick-add a consented testimony encounter
+            fac_id = request.form.get('facility_id')
+            text_t = request.form.get('testimony', '').strip()
+            if fac_id and text_t:
+                db.session.add(ClientEncounter(
+                    facility_id=int(fac_id),
+                    encounter_date=datetime.utcnow().date(),
+                    outcome='accepted',
+                    method_accepted=request.form.get('method', 'Injectable'),
+                    client_code='SAMP-MANUAL',
+                    consent_to_share_story=True,
+                    patient_testimony=text_t,
+                    satisfaction_score=int(request.form.get('score') or 5),
+                    created_by=current_user.id,
+                ))
+                db.session.commit()
+                flash('Testimony added for reports.', 'success')
+        return redirect(url_for('admin_sample_data'))
+
+    stats = {
+        'encounters': ClientEncounter.query.count(),
+        'sample_encounters': ClientEncounter.query.filter(ClientEncounter.client_code.like('SAMP-%')).count(),
+        'expenditures': Expenditure.query.count(),
+        'paid_expenses': ExpenseRequest.query.filter_by(status='paid').count(),
+        'budget_lines': BudgetLine.query.count(),
+        'testimonies': ClientEncounter.query.filter(
+            ClientEncounter.consent_to_share_story == True,
+            ClientEncounter.patient_testimony.isnot(None),
+        ).count(),
+        'loaded_at': get_setting('sample_data_loaded_at', ''),
+        'kpi_notes': get_setting('sample_kpi_notes', ''),
+        'disclaimer': get_setting('sample_report_disclaimer',
+                                  'Figures may include demonstration sample data for pilot reporting.'),
+    }
+    facilities = Facility.query.order_by(Facility.name).all()
+    products = Product.query.filter_by(is_active=True).all()
+    # Editable budget snapshot
+    codes = ExpenseCode.query.filter_by(is_active=True).order_by(ExpenseCode.code).all()
+    budget_rows = []
+    for c in codes:
+        bl = BudgetLine.query.filter_by(expense_code_id=c.id, fiscal_year='2026', period_label='Pilot').first()
+        budget_rows.append({'code': c, 'budget': float(bl.budget_amount) if bl else 0,
+                            'narration': bl.variance_narration if bl else ''})
+    return render_template('admin_sample_data.html', stats=stats, facilities=facilities,
+                           products=products, budget_rows=budget_rows)
+
+
+@app.route('/admin/sample-data/budget', methods=['POST'])
+@login_required
+@general_admin_required
+def admin_sample_data_budget():
+    """Inline edit of pilot budget sample amounts from sample-data page."""
+    codes = ExpenseCode.query.filter_by(is_active=True).all()
+    for c in codes:
+        amt = request.form.get(f'b_{c.id}', '').strip()
+        narr = request.form.get(f'n_{c.id}', '').strip()
+        try:
+            budget_amt = Decimal(amt) if amt else Decimal('0')
+        except Exception:
+            budget_amt = Decimal('0')
+        bl = BudgetLine.query.filter_by(expense_code_id=c.id, fiscal_year='2026', period_label='Pilot').first()
+        if not bl:
+            bl = BudgetLine(expense_code_id=c.id, fiscal_year='2026', period_label='Pilot')
+            db.session.add(bl)
+        bl.budget_amount = budget_amt
+        bl.variance_narration = narr
+        bl.updated_by = current_user.id
+    db.session.commit()
+    flash('Sample budget figures updated — variance report will use these values.', 'success')
+    return redirect(url_for('admin_sample_data'))
+
+
+
 # ---------------------------------------------------------------------------
 # Report branding + comprehensive backup / restore
 # ---------------------------------------------------------------------------
@@ -2654,6 +3359,7 @@ def admin_branding():
         set_setting('programme_title', request.form.get('programme_title', '').strip() or 'Benin City Mayor Challenge')
         set_setting('report_subtitle', request.form.get('report_subtitle', '').strip())
         set_setting('org_line', request.form.get('org_line', '').strip())
+        set_setting('app_name', request.form.get('app_name', '').strip() or 'CONTRAconnect')
         f = request.files.get('logo')
         if f and f.filename:
             ext = f.filename.rsplit('.', 1)[-1].lower()
@@ -2664,6 +3370,15 @@ def admin_branding():
                 dest = os.path.join(app.root_path, 'static', rel)
                 f.save(dest)
                 set_setting('report_logo_path', rel)
+        af = request.files.get('app_logo')
+        if af and af.filename:
+            ext = af.filename.rsplit('.', 1)[-1].lower()
+            if ext in ('png', 'jpg', 'jpeg', 'gif', 'webp'):
+                rel = f'uploads/branding/app_logo.{ext}'
+                dest_dir = os.path.join(app.root_path, 'static', 'uploads', 'branding')
+                os.makedirs(dest_dir, exist_ok=True)
+                af.save(os.path.join(app.root_path, 'static', rel))
+                set_setting('app_logo_path', rel)
         flash('Branding settings saved. All new reports will use this heading and logo.', 'success')
         return redirect(url_for('admin_branding'))
     return render_template('admin_branding.html', brand=brand)
@@ -2809,6 +3524,31 @@ def api_method_uptake():
 # Seed data for demo
 # ---------------------------------------------------------------------------
 
+
+def ensure_expense_codes():
+    if ExpenseCode.query.first():
+        return
+    sample_codes = [
+        ('EXP-STAFF-01', 'Staff', 'Field staff wage subsidies and stipends'),
+        ('EXP-STAFF-02', 'Staff', 'Consultant professional fees'),
+        ('EXP-TRAIN-01', 'Training', 'Induction and clinical refresher training'),
+        ('EXP-TRAIN-02', 'Training', 'Quality of care review meetings'),
+        ('EXP-LOG-01', 'Logistics', 'Commodity distribution — vehicle hire and fuel'),
+        ('EXP-LOG-02', 'Logistics', 'Central storage rental and cold-chain utilities'),
+        ('EXP-SBC-01', 'Demand generation', 'Community dialogues and stakeholder advocacy'),
+        ('EXP-SBC-02', 'Demand generation', 'IEC materials, radio and digital campaigns'),
+        ('EXP-COMM-01', 'Commodities', 'Family planning commodities (LARC and short-acting)'),
+        ('EXP-COMM-02', 'Commodities', 'Medical consumables and IPC supplies'),
+        ('EXP-EQP-01', 'Equipment', 'Mobile kiosk fabrication and clinical equipment'),
+        ('EXP-EQP-02', 'Equipment', 'Field IT devices and maintenance'),
+        ('EXP-OPS-01', 'Office operations', 'Utilities, internet, stationery and security'),
+        ('EXP-PLT-01', 'Platform', 'Digital platform hosting, security and support'),
+        ('EXP-VND-01', 'Vendor', 'Vendor administrative service charge'),
+    ]
+    for code, cat, desc in sample_codes:
+        db.session.add(ExpenseCode(code=code, category=cat, description=desc, is_active=True))
+    db.session.commit()
+
 def seed_data():
     """
     Bootstrap master data only — no dummy encounters/expenditures in production.
@@ -2887,6 +3627,31 @@ def seed_data():
     if os.environ.get('SEED_DEMO_DATA', '').strip() in ('1', 'true', 'yes'):
         _seed_demo_activity(admin, products, [fac1, fac2, fac3])
     print('Seed data created (clean facilities + catalogue + general admin).')
+
+
+
+    # Sample expense codes (chart of accounts)
+    if not ExpenseCode.query.first():
+        sample_codes = [
+            ('EXP-STAFF-01', 'Staff', 'Field staff wage subsidies and stipends'),
+            ('EXP-STAFF-02', 'Staff', 'Consultant professional fees'),
+            ('EXP-TRAIN-01', 'Training', 'Induction and clinical refresher training'),
+            ('EXP-TRAIN-02', 'Training', 'Quality of care review meetings'),
+            ('EXP-LOG-01', 'Logistics', 'Commodity distribution — vehicle hire and fuel'),
+            ('EXP-LOG-02', 'Logistics', 'Central storage rental and cold-chain utilities'),
+            ('EXP-SBC-01', 'Demand generation', 'Community dialogues and stakeholder advocacy'),
+            ('EXP-SBC-02', 'Demand generation', 'IEC materials, radio and digital campaigns'),
+            ('EXP-COMM-01', 'Commodities', 'Family planning commodities (LARC and short-acting)'),
+            ('EXP-COMM-02', 'Commodities', 'Medical consumables and IPC supplies'),
+            ('EXP-EQP-01', 'Equipment', 'Mobile kiosk fabrication and clinical equipment'),
+            ('EXP-EQP-02', 'Equipment', 'Field IT devices and maintenance'),
+            ('EXP-OPS-01', 'Office operations', 'Utilities, internet, stationery and security'),
+            ('EXP-PLT-01', 'Platform', 'Digital platform hosting, security and support'),
+            ('EXP-VND-01', 'Vendor', 'Vendor administrative service charge'),
+        ]
+        for code, cat, desc in sample_codes:
+            db.session.add(ExpenseCode(code=code, category=cat, description=desc, is_active=True))
+        db.session.commit()
 
 
 def _seed_demo_activity(admin, products, facilities):

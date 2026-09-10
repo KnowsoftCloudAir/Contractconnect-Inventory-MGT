@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}Report sample data{% endblock %}
+{% block content %}
+<div class="page-hero">
+  <h2 class="mb-1">Editable sample data for reports</h2>
+  <p class="text-muted small mb-0">
+    Load demonstration data so dashboards, PPT/PDF reports, cost analytics, variance and testimonies are populated.
+    Edit budget figures and notes below; clear sample-tagged rows when moving to live data.
+  </p>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-3"><div class="card stat-card"><div class="card-body"><div class="text-muted small">Encounters</div><h3>{{ stats.encounters }}</h3><div class="small">Sample: {{ stats.sample_encounters }}</div></div></div></div>
+  <div class="col-md-3"><div class="card stat-card success"><div class="card-body"><div class="text-muted small">Testimonies</div><h3>{{ stats.testimonies }}</h3></div></div></div>
+  <div class="col-md-3"><div class="card stat-card warning"><div class="card-body"><div class="text-muted small">Ledger entries</div><h3>{{ stats.expenditures }}</h3></div></div></div>
+  <div class="col-md-3"><div class="card stat-card"><div class="card-body"><div class="text-muted small">Paid expenses</div><h3>{{ stats.paid_expenses }}</h3><div class="small">Budget lines: {{ stats.budget_lines }}</div></div></div></div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-4">
+    <div class="card mb-3">
+      <div class="card-header bg-white fw-semibold">Load / clear sample set</div>
+      <div class="card-body">
+        <p class="small text-muted">Creates sample stock, ~45 encounters (method mix + refusal), ledger lines, pilot budgets, paid expenses for variance, and consented stories.</p>
+        {% if stats.loaded_at %}<p class="small">Last loaded: <code>{{ stats.loaded_at }}</code></p>{% endif %}
+        <form method="post" class="d-grid gap-2">
+          <button name="action" value="load" class="btn btn-success" onclick="return confirm('Load / refresh sample report data?');">Load sample data for all reports</button>
+          <button name="action" value="clear" class="btn btn-outline-danger" onclick="return confirm('Remove SAMPLE-tagged rows only?');">Clear sample-tagged data</button>
+        </form>
+      </div>
+    </div>
+    <div class="card mb-3">
+      <div class="card-header bg-white fw-semibold">Report notes (editable)</div>
+      <div class="card-body">
+        <form method="post">
+          <input type="hidden" name="action" value="save_kpis">
+          <div class="mb-2">
+            <label class="form-label">KPI / methodology notes</label>
+            <textarea name="sample_kpi_notes" class="form-control" rows="3" placeholder="e.g. Unit cost excludes platform build…">{{ stats.kpi_notes }}</textarea>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Report disclaimer</label>
+            <textarea name="sample_report_disclaimer" class="form-control" rows="2">{{ stats.disclaimer }}</textarea>
+          </div>
+          <button class="btn btn-outline-secondary btn-sm">Save notes</button>
+        </form>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header bg-white fw-semibold">Add testimony for reports</div>
+      <div class="card-body">
+        <form method="post">
+          <input type="hidden" name="action" value="save_testimony">
+          <div class="mb-2">
+            <label class="form-label">Facility</label>
+            <select name="facility_id" class="form-select form-select-sm" required>
+              {% for f in facilities %}<option value="{{ f.id }}">{{ f.name }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Method</label>
+            <select name="method" class="form-select form-select-sm">
+              {% for p in products %}<option value="{{ p.method_code }}">{{ p.method_code }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Satisfaction (1–5)</label>
+            <input type="number" name="score" min="1" max="5" value="5" class="form-control form-control-sm">
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Testimony text</label>
+            <textarea name="testimony" class="form-control" rows="3" required></textarea>
+          </div>
+          <button class="btn btn-success btn-sm">Add consented story</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-8">
+    <div class="card">
+      <div class="card-header bg-white fw-semibold">Edit pilot budget sample (feeds variance report)</div>
+      <div class="card-body p-0">
+        <form method="post" action="{{ url_for('admin_sample_data_budget') }}">
+          <div class="table-responsive">
+            <table class="table table-sm mb-0">
+              <thead><tr><th>Code</th><th>Category</th><th class="text-end">Budget</th><th>Variance narration</th></tr></thead>
+              <tbody>
+              {% for r in budget_rows %}
+              <tr>
+                <td><code>{{ r.code.code }}</code></td>
+                <td class="small">{{ r.code.category }}</td>
+                <td class="text-end" style="width:120px">
+                  <input type="number" step="0.01" name="b_{{ r.code.id }}" class="form-control form-control-sm text-end" value="{{ '%.2f'|format(r.budget) }}">
+                </td>
+                <td><input type="text" name="n_{{ r.code.id }}" class="form-control form-control-sm" value="{{ r.narration or '' }}"></td>
+              </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <div class="p-3">
+            <button class="btn btn-success">Save budget sample figures</button>
+            <a class="btn btn-outline-dark" href="{{ url_for('budget_variance_report') }}">Open variance report</a>
+            <a class="btn btn-outline-secondary" href="{{ url_for('admin_costs') }}">Cost analytics</a>
+            <a class="btn btn-outline-secondary" href="{{ url_for('admin_period_report', period='programmatic', fmt='pptx') }}">Programmatic PPT</a>
+          </div>
+        </form>
+      </div>
+    </div>
+    <div class="card mt-3">
+      <div class="card-body small text-muted">
+        <strong>What gets filled</strong>
+        <ul class="mb-0">
+          <li>Ops dashboard &amp; method-uptake charts</li>
+          <li>Cost analytics (clients, unit cost, per-kiosk)</li>
+          <li>Budget variance (budget vs paid expenses)</li>
+          <li>PPT/PDF programmatic slides + client voices</li>
+          <li>Excel financial &amp; full data exports</li>
+        </ul>
+        Edit live records anytime under Facilities, Ledgers, Encounters, Budget template, Homepage editor.
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

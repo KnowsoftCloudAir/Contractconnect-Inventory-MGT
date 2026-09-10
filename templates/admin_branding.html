@@ -9,6 +9,18 @@
             <div class="card-body">
                 <form method="post" enctype="multipart/form-data">
                     <div class="mb-3">
+                        <label class="form-label">Application display name</label>
+                        <input type="text" name="app_name" class="form-control" value="{{ brand.app_name }}">
+                        <div class="form-text">Shown in navbar and login (e.g. CONTRAconnect)</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">App logo (navbar / login)</label>
+                        <input type="file" name="app_logo" class="form-control" accept="image/*">
+                        {% if brand.app_logo %}
+                        <img src="{{ url_for('static', filename=brand.app_logo) }}" alt="App logo" style="max-height:48px" class="mt-2">
+                        {% endif %}
+                    </div>
+                    <div class="mb-3">
                         <label class="form-label">Programme title (report heading) *</label>
                         <input type="text" name="programme_title" class="form-control"
                                value="{{ brand.programme_title }}" required>

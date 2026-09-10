@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}CONTRAconnect{% endblock %}</title>
+    <title>{% block title %}{{ app_brand.app_name if app_brand is defined else 'CONTRAconnect' }}{% endblock %}</title>
     <meta name="theme-color" content="#0d6e6e">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -53,8 +53,13 @@
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark sticky-top navbar-cc">
         <div class="container-fluid">
-            <a class="navbar-brand fw-bold" href="{{ url_for('index') }}">
-                <i class="bi bi-heart-pulse"></i> CONTRAconnect
+            <a class="navbar-brand fw-bold d-flex align-items-center gap-2" href="{{ url_for('index') }}">
+                {% if app_brand is defined and app_brand.app_logo %}
+                <img src="{{ url_for('static', filename=app_brand.app_logo) }}" alt="" style="height:28px">
+                {% else %}
+                <i class="bi bi-heart-pulse"></i>
+                {% endif %}
+                {{ app_brand.app_name if app_brand is defined else 'CONTRAconnect' }}
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navMain">
                 <span class="navbar-toggler-icon"></span>
@@ -122,11 +127,17 @@
                     <li class="nav-item"><a class="nav-link" href="{{ url_for('export_financial_excel', days=90) }}"><i class="bi bi-file-earmark-excel"></i> Export financial</a></li>
                     {% endif %}
                     <li class="nav-item"><a class="nav-link {% if request.endpoint in ['invoice_list','invoice_detail','invoice_new'] %}active{% endif %}" href="{{ url_for('invoice_list') }}"><i class="bi bi-receipt"></i> Payment invoices</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint and request.endpoint.startswith('expense') %}active{% endif %}" href="{{ url_for('expense_list') }}"><i class="bi bi-cash-coin"></i> Expense requests</a></li>
+                    {% if current_user.role in ['finance_analyst','finance_admin','general_admin','admin','project_manager'] %}
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_budget' %}active{% endif %}" href="{{ url_for('admin_budget') }}"><i class="bi bi-table"></i> Budget template</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'budget_variance_report' %}active{% endif %}" href="{{ url_for('budget_variance_report') }}"><i class="bi bi-graph-up-arrow"></i> Variance report</a></li>
+                    {% endif %}
                     <li class="nav-item"><a class="nav-link" href="{{ url_for('admin_period_report', period='monthly', fmt='pdf') }}"><i class="bi bi-file-earmark-bar-graph"></i> Reports</a></li>
                     <li class="nav-item"><a class="nav-link" href="{{ url_for('admin_period_report', period='programmatic', fmt='pptx') }}"><i class="bi bi-filetype-ppt"></i> Programmatic PPT</a></li>
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_branding' %}active{% endif %}" href="{{ url_for('admin_branding') }}"><i class="bi bi-palette"></i> Report branding</a></li>
                     {% if current_user.role in ['general_admin', 'admin', 'project_manager'] %}
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_homepage_editor' %}active{% endif %}" href="{{ url_for('admin_homepage_editor') }}"><i class="bi bi-window"></i> Public homepage</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_sample_data' %}active{% endif %}" href="{{ url_for('admin_sample_data') }}"><i class="bi bi-database"></i> Report sample data</a></li>
                     {% endif %}
                     {% if current_user.role in ['general_admin', 'admin', 'project_manager'] %}
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_backup_page' %}active{% endif %}" href="{{ url_for('admin_backup_page') }}"><i class="bi bi-cloud-arrow-down"></i> Backup &amp; restore</a></li>

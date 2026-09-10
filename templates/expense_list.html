@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Expense requests – {{ app_brand.app_name if app_brand is defined else 'CONTRAconnect' }}{% endblock %}
+{% block content %}
+<div class="page-hero d-flex flex-wrap justify-content-between align-items-center gap-2">
+  <div>
+    <h2 class="mb-1">Project expense requests</h2>
+    <p class="text-muted small mb-0">Submit → Finance review → Project Manager approve → Finance pay → Budget actuals</p>
+  </div>
+  <a href="{{ url_for('expense_new') }}" class="btn btn-success">New expense request</a>
+</div>
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle">
+      <thead>
+        <tr>
+          <th>Request #</th>
+          <th>Code</th>
+          <th>Category</th>
+          <th>Requester</th>
+          <th class="text-end">Amount</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for er in items %}
+        <tr>
+          <td>{{ er.request_number }}</td>
+          <td><code>{{ er.expense_code.code if er.expense_code else '—' }}</code></td>
+          <td class="small">{{ er.category }}</td>
+          <td class="small">{{ er.requester.full_name if er.requester else '—' }}</td>
+          <td class="text-end">{{ er.currency }} {{ '%.2f'|format(er.amount) }}</td>
+          <td>
+            {% if er.status == 'submitted' %}<span class="badge bg-warning text-dark">Awaiting Finance</span>
+            {% elif er.status == 'finance_review' %}<span class="badge bg-info text-dark">Awaiting PM</span>
+            {% elif er.status == 'pm_approved' %}<span class="badge bg-primary">Approved</span>
+            {% elif er.status == 'paid' %}<span class="badge bg-success">Paid</span>
+            {% elif er.status in ['finance_rejected','pm_rejected'] %}<span class="badge bg-danger">{{ er.status }}</span>
+            {% else %}<span class="badge bg-secondary">{{ er.status }}</span>{% endif %}
+          </td>
+          <td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('expense_detail', eid=er.id) }}">Open</a></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="7" class="text-muted">No expense requests yet</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
