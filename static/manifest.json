@@ -1,7 +1,7 @@
 {
-  "name": "CONTRAconnect by Knowsoft",
-  "short_name": "CONTRAconnect",
-  "description": "Contraceptive commodity, encounters & cost analytics \u2014 Knowsoft with ease",
+  "name": "Project Financial Management Workflow",
+  "short_name": "PFM Workflow",
+  "description": "Project financial management, inventory and cost analytics \u2014 Knowsoft with ease",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0b6e6e",

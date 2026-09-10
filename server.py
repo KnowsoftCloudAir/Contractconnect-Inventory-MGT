@@ -76,7 +76,7 @@ def inject_branding():
     try:
         b = report_branding()
     except Exception:
-        b = {'app_name': 'CONTRAconnect', 'app_logo': ''}
+        b = {'app_name': 'Project Financial Management Workflow', 'app_logo': ''}
     return {'app_brand': b}
 
 
@@ -200,6 +200,12 @@ class User(UserMixin, db.Model):
     # First-login onboarding
     must_complete_onboarding = db.Column(db.Boolean, default=False)
     onboarding_status = db.Column(db.String(30), default='active')  # pending_profile | pending_approval | active | rejected
+    # Privilege flags (General Admin assigns; General Admin always has all)
+    can_finance_review = db.Column(db.Boolean, default=False)
+    can_pm_approve = db.Column(db.Boolean, default=False)
+    can_pay_expenses = db.Column(db.Boolean, default=False)
+    can_view_finance = db.Column(db.Boolean, default=False)
+    can_download_financial = db.Column(db.Boolean, default=False)
     activation_code = db.Column(db.String(40))  # issued by admin
     profile_photo = db.Column(db.String(255))
     phone = db.Column(db.String(40))
@@ -565,10 +571,10 @@ def report_branding():
     """Defaults for Benin City Mayor Challenge + editable logo path."""
     return {
         'programme_title': get_setting('programme_title', 'Benin City Mayor Challenge'),
-        'report_subtitle': get_setting('report_subtitle', 'CONTRAconnect — UNDP Supported Programme'),
+        'report_subtitle': get_setting('report_subtitle', 'Project Financial Management Workflow — UNDP Supported Programme'),
         'logo_path': get_setting('report_logo_path', 'branding/knowsoft_logo.png'),  # relative under static/
         'org_line': get_setting('org_line', 'United Nations Development Programme (UNDP)'),
-        'app_name': get_setting('app_name', 'CONTRAconnect'),
+        'app_name': get_setting('app_name', 'Project Financial Management Workflow'),
         'app_logo': get_setting('app_logo_path', 'branding/app_logo_default.png'),
     }
 
@@ -671,6 +677,12 @@ def _home_for_role(role):
     if role in STAFF_ROLES or role in ADMIN_ROLES:
         return 'staff_dashboard'
     return 'index'
+
+
+
+def restricted_response(message='Restricted area'):
+    """Blank restricted page with home-style background and back button."""
+    return render_template('restricted.html', message=message), 403
 
 
 def admin_required(f):
@@ -1994,6 +2006,20 @@ def admin_manage_users():
                 db.session.commit()
                 state = 'activated' if u.is_active else 'deactivated'
                 flash(f'{u.full_name} {state}.', 'success')
+        elif action == 'set_privileges':
+            uid = int(request.form.get('user_id'))
+            u = db.session.get(User, uid)
+            if not u or u.id == current_user.id:
+                flash('Invalid user for privilege edit.', 'danger')
+            else:
+                u.can_finance_review = request.form.get('can_finance_review') == 'on'
+                u.can_pm_approve = request.form.get('can_pm_approve') == 'on'
+                u.can_pay_expenses = request.form.get('can_pay_expenses') == 'on'
+                u.can_view_finance = request.form.get('can_view_finance') == 'on'
+                u.can_download_financial = request.form.get('can_download_financial') == 'on'
+                db.session.commit()
+                flash(f'Privileges updated for {u.full_name}.', 'success')
+            return redirect(url_for('admin_manage_users'))
         elif action == 'set_role':
             uid = int(request.form.get('user_id'))
             role = request.form.get('role')
@@ -2119,11 +2145,24 @@ def _make_chart_images(cost_data, uptake, tmpdir):
 @login_required
 @admin_required
 def admin_period_report(period, fmt):
-    """Monthly / quarterly / yearly report as pptx or pdf — branded Benin City Mayor Challenge."""
+    """Monthly / quarterly / yearly report as pptx or pdf."""
     if period not in ('monthly', 'quarterly', 'yearly', 'programmatic'):
         abort(404)
     if fmt not in ('pptx', 'pdf'):
         abort(404)
+    try:
+        return _admin_period_report_impl(period, fmt)
+    except Exception as e:
+        app.logger.exception('Report generation failed')
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        flash(f'Report generation failed: {type(e).__name__}: {e}', 'danger')
+        return redirect(url_for('admin_dashboard'))
+
+
+def _admin_period_report_impl(period, fmt):
     start, end, label = _period_bounds(period if period != 'programmatic' else 'quarterly')
     if period == 'programmatic':
         label = f'Programmatic briefing ({start.isoformat()} → {end.isoformat()})'
@@ -2218,7 +2257,7 @@ def _build_pptx_report(label, period, cost_data, uptake, fac_rows, charts, start
         p.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
         box2 = slide.shapes.add_textbox(Inches(0.8), Inches(3.9), Inches(11.7), Inches(1.5))
         t2 = box2.text_frame
-        t2.paragraphs[0].text = f"CONTRAconnect programmatic report — {label}"
+        t2.paragraphs[0].text = f"{brand.get('app_name', 'PFMW')} programmatic report — {label}"
         t2.paragraphs[0].font.size = Pt(20)
         t2.paragraphs[0].font.color.rgb = RGBColor(0xE8, 0xF5, 0xF5)
         p3 = t2.add_paragraph()
@@ -2330,7 +2369,7 @@ def _build_pptx_report(label, period, cost_data, uptake, fac_rows, charts, start
     tf.paragraphs[0].font.bold = True
     tf.paragraphs[0].font.color.rgb = teal
     p = tf.add_paragraph()
-    p.text = brand.get('report_subtitle') or 'CONTRAconnect digital platform'
+    p.text = brand.get('report_subtitle') or brand.get('app_name', 'Project Financial Management Workflow')
     p.font.size = Pt(16)
     p = tf.add_paragraph()
     p.text = brand.get('org_line') or ''
@@ -2353,7 +2392,7 @@ def _build_pdf_report(label, period, cost_data, uptake, fac_rows, charts, start,
     story = []
     brand = brand or report_branding()
     story.append(Paragraph(brand.get('programme_title', 'Benin City Mayor Challenge'), title_style))
-    story.append(Paragraph(f"CONTRAconnect {period.title()} Report — {label}", styles['Heading2']))
+    story.append(Paragraph(f"{brand.get('app_name', 'Report')} {period.title()} Report — {label}", styles['Heading2']))
     story.append(Paragraph(f'Period: {start.isoformat()} to {end.isoformat()}', styles['Normal']))
     story.append(Spacer(1, 12))
     story.append(Paragraph('Key indicators', styles['Heading2']))
@@ -2403,7 +2442,7 @@ def _build_pdf_report(label, period, cost_data, uptake, fac_rows, charts, start,
     story.append(ft)
     doc.build(story)
     buf.seek(0)
-    fname = f'CONTRAconnect_{period}_{label.replace(" ", "_")}.pdf'
+    fname = f"Report_{period}_{label.replace(' ', '_')}.pdf"
     return send_file(buf, as_attachment=True, download_name=fname, mimetype='application/pdf')
 
 
@@ -2609,12 +2648,23 @@ def admin_activity():
 # ---------------------------------------------------------------------------
 # Expense requests, budget, variance, payment vouchers
 # ---------------------------------------------------------------------------
-def _can_review_expense(role):
-    return role in ('finance_analyst', 'finance_admin', 'general_admin', 'admin')
+def _can_review_expense(user_or_role):
+    """Finance review: role-based or General-Admin-granted privilege."""
+    if hasattr(user_or_role, 'role'):
+        u = user_or_role
+        if u.role in ('finance_analyst', 'finance_admin', 'general_admin', 'admin'):
+            return True
+        return bool(getattr(u, 'can_finance_review', False) or getattr(u, 'can_pay_expenses', False))
+    return user_or_role in ('finance_analyst', 'finance_admin', 'general_admin', 'admin')
 
 
-def _can_approve_expense_pm(role):
-    return role in ('project_manager', 'program_admin', 'general_admin', 'admin')
+def _can_approve_expense_pm(user_or_role):
+    if hasattr(user_or_role, 'role'):
+        u = user_or_role
+        if u.role in ('project_manager', 'program_admin', 'general_admin', 'admin'):
+            return True
+        return bool(getattr(u, 'can_pm_approve', False))
+    return user_or_role in ('project_manager', 'program_admin', 'general_admin', 'admin')
 
 
 @app.route('/api/expense-code/<int:cid>')
@@ -2633,7 +2683,7 @@ def expense_list():
         flash('Expense claims are for programme staff.', 'warning')
         return redirect(url_for('provider_dashboard'))
     q = ExpenseRequest.query.order_by(ExpenseRequest.created_at.desc())
-    if not (_can_review_expense(current_user.role) or _can_approve_expense_pm(current_user.role)):
+    if not (_can_review_expense(current_user) or _can_approve_expense_pm(current_user)):
         q = q.filter_by(requester_id=current_user.id)
     items = q.limit(200).all()
     return render_template('expense_list.html', items=items)
@@ -2699,7 +2749,7 @@ def expense_detail(eid):
     if not er:
         abort(404)
     if er.requester_id != current_user.id and not (
-        _can_review_expense(current_user.role) or _can_approve_expense_pm(current_user.role)
+        _can_review_expense(current_user) or _can_approve_expense_pm(current_user)
     ):
         abort(403)
     return render_template('expense_detail.html', er=er)
@@ -2721,7 +2771,7 @@ def expense_submit(eid):
 @app.route('/expenses/<int:eid>/finance-review', methods=['POST'])
 @login_required
 def expense_finance_review(eid):
-    if not _can_review_expense(current_user.role):
+    if not _can_review_expense(current_user):
         flash('Finance review privilege required.', 'danger')
         return redirect(url_for('expense_detail', eid=eid))
     er = db.session.get(ExpenseRequest, eid)
@@ -2744,7 +2794,7 @@ def expense_finance_review(eid):
 @app.route('/expenses/<int:eid>/pm-approve', methods=['POST'])
 @login_required
 def expense_pm_approve(eid):
-    if not _can_approve_expense_pm(current_user.role):
+    if not _can_approve_expense_pm(current_user):
         flash('Project Manager approval privilege required.', 'danger')
         return redirect(url_for('expense_detail', eid=eid))
     er = db.session.get(ExpenseRequest, eid)
@@ -2767,7 +2817,7 @@ def expense_pm_approve(eid):
 @app.route('/expenses/<int:eid>/mark-paid', methods=['POST'])
 @login_required
 def expense_mark_paid(eid):
-    if not _can_review_expense(current_user.role):
+    if not _can_review_expense(current_user):
         flash('Only Finance can mark paid.', 'danger')
         return redirect(url_for('expense_detail', eid=eid))
     er = db.session.get(ExpenseRequest, eid)
@@ -2801,7 +2851,7 @@ def expense_voucher_pdf(eid):
     if not er:
         abort(404)
     if er.requester_id != current_user.id and not (
-        _can_review_expense(current_user.role) or _can_approve_expense_pm(current_user.role)
+        _can_review_expense(current_user) or _can_approve_expense_pm(current_user)
     ):
         abort(403)
     brand = report_branding()
@@ -2812,7 +2862,7 @@ def expense_voucher_pdf(eid):
     styles = getSampleStyleSheet()
     title = ParagraphStyle('VT', parent=styles['Heading1'], textColor=colors.HexColor('#0b6e6e'), fontSize=16)
     story = []
-    story.append(Paragraph(brand.get('app_name', 'CONTRAconnect'), title))
+    story.append(Paragraph(brand.get('app_name', 'Project Financial Management Workflow'), title))
     story.append(Paragraph(brand.get('programme_title', 'Benin City Mayor Challenge'), styles['Heading2']))
     story.append(Paragraph('<b>PAYMENT VOUCHER</b>', styles['Heading2']))
     story.append(Spacer(1, 8))
@@ -2864,13 +2914,13 @@ def expense_voucher_pdf(eid):
 @admin_required
 def admin_budget():
     """Finance budget template: amounts + variance narration per expense code."""
-    if not _can_review_expense(current_user.role) and current_user.role not in ('project_manager', 'general_admin', 'admin'):
+    if not _can_review_expense(current_user) and current_user.role not in ('project_manager', 'general_admin', 'admin'):
         flash('Budget access restricted.', 'danger')
         return redirect(url_for('index'))
     fy = request.args.get('fy', '2026')
     period = request.args.get('period', 'Pilot')
     codes = ExpenseCode.query.filter_by(is_active=True).order_by(ExpenseCode.code).all()
-    if request.method == 'POST' and _can_review_expense(current_user.role):
+    if request.method == 'POST' and _can_review_expense(current_user):
         fy = request.form.get('fiscal_year', fy)
         period = request.form.get('period_label', period)
         for c in codes:
@@ -2909,7 +2959,7 @@ def admin_budget():
             'line': bl,
         })
     return render_template('admin_budget.html', rows=rows, fy=fy, period=period,
-                           can_edit=_can_review_expense(current_user.role))
+                           can_edit=_can_review_expense(current_user))
 
 
 @app.route('/admin/budget/variance-report')

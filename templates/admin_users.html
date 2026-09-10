@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Admin Users – CONTRAconnect{% endblock %}
+{% block title %}Admin Users – Project Financial Management Workflow{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
@@ -109,5 +109,37 @@
             </div>
         </div>
     </div>
+</div>
+
+<div class="card mt-4">
+  <div class="card-header bg-white fw-semibold">Assign privileges (General Admin only)</div>
+  <div class="card-body">
+    <p class="small text-muted">Grant selected rights to Program Managers or other staff without making them General Admin.</p>
+    <div class="table-responsive">
+      <table class="table table-sm align-middle">
+        <thead><tr><th>User</th><th>Role</th><th>Finance review</th><th>PM approve</th><th>Pay expenses</th><th>View finance</th><th>Download financial</th><th></th></tr></thead>
+        <tbody>
+        {% for u in admins %}
+        {% if u.role != 'general_admin' and u.role != 'admin' %}
+        <tr>
+          <form method="post">
+            <input type="hidden" name="action" value="set_privileges">
+            <input type="hidden" name="user_id" value="{{ u.id }}">
+            <td>{{ u.full_name }}<br><span class="small text-muted">{{ u.email }}</span></td>
+            <td class="small">{{ u.role }}</td>
+            <td class="text-center"><input type="checkbox" name="can_finance_review" {% if u.can_finance_review %}checked{% endif %}></td>
+            <td class="text-center"><input type="checkbox" name="can_pm_approve" {% if u.can_pm_approve %}checked{% endif %}></td>
+            <td class="text-center"><input type="checkbox" name="can_pay_expenses" {% if u.can_pay_expenses %}checked{% endif %}></td>
+            <td class="text-center"><input type="checkbox" name="can_view_finance" {% if u.can_view_finance %}checked{% endif %}></td>
+            <td class="text-center"><input type="checkbox" name="can_download_financial" {% if u.can_download_financial %}checked{% endif %}></td>
+            <td><button class="btn btn-sm btn-outline-primary">Save</button></td>
+          </form>
+        </tr>
+        {% endif %}
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
 </div>
 {% endblock %}
