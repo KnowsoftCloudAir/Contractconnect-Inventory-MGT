@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Messages – CONTRAconnect{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="mb-0">Messages</h2>
+        <span class="text-muted small">{{ facility.name }}</span>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-5">
+        <div class="card">
+            <div class="card-header bg-white fw-semibold">Reply / send to Admin</div>
+            <div class="card-body">
+                <form method="post">
+                    <div class="mb-2">
+                        <input type="text" name="subject" class="form-control" placeholder="Subject (optional)">
+                    </div>
+                    <div class="mb-2">
+                        <textarea name="body" class="form-control" rows="4" required placeholder="Write your message or reply…"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-success w-100">Send</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-7">
+        <div class="card">
+            <div class="card-header bg-white fw-semibold">Conversation</div>
+            <div class="card-body p-0" style="max-height: 520px; overflow-y: auto;">
+                {% for m in messages %}
+                <div class="border-bottom p-3 {% if not m.is_from_admin %}bg-light{% endif %}">
+                    <div class="d-flex justify-content-between small text-muted mb-1">
+                        <span>
+                            {% if m.is_from_admin %}
+                            <span class="badge bg-dark">Admin</span>
+                            {% else %}
+                            <span class="badge bg-success">You / facility</span>
+                            {% endif %}
+                            {{ m.sender.full_name if m.sender else '' }}
+                        </span>
+                        <span>{{ m.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+                    </div>
+                    {% if m.subject %}<div class="fw-semibold small">{{ m.subject }}</div>{% endif %}
+                    <div class="small" style="white-space: pre-wrap;">{{ m.body }}</div>
+                    {% if m.is_from_admin %}
+                    <form method="post" class="mt-2">
+                        <input type="hidden" name="parent_id" value="{{ m.id }}">
+                        <input type="hidden" name="subject" value="Re: {{ m.subject or 'Message' }}">
+                        <div class="input-group input-group-sm">
+                            <input type="text" name="body" class="form-control" placeholder="Quick reply…" required>
+                            <button class="btn btn-outline-success">Reply</button>
+                        </div>
+                    </form>
+                    {% endif %}
+                </div>
+                {% else %}
+                <p class="text-muted small p-3 mb-0">No messages yet. Admin messages will appear here.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Backup & restore – CONTRAconnect{% endblock %}
+{% block content %}
+<h2 class="mb-2">Comprehensive backup &amp; restore</h2>
+<p class="text-muted">Download a full archive of all database tables and uploaded files (logos, invoice evidence). Restore replaces current data with the backup contents.</p>
+<div class="row g-4">
+    <div class="col-md-6">
+        <div class="card border-success h-100">
+            <div class="card-header bg-white fw-semibold">Create backup</div>
+            <div class="card-body">
+                <p class="small">Includes: users, facilities, stock, encounters (with testimonies), invoices, expenditures, settings, and <code>static/uploads</code>.</p>
+                <a class="btn btn-success" href="{{ url_for('admin_backup_download') }}">
+                    <i class="bi bi-download"></i> Download full backup (.zip)
+                </a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card border-danger h-100">
+            <div class="card-header bg-white fw-semibold">Restore from backup</div>
+            <div class="card-body">
+                <p class="small text-danger">This overwrites existing database rows. Store the current backup first.</p>
+                <form method="post" action="{{ url_for('admin_backup_restore') }}" enctype="multipart/form-data">
+                    <div class="mb-2">
+                        <input type="file" name="backup_file" class="form-control" accept=".zip" required>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Type <code>RESTORE</code> to confirm</label>
+                        <input type="text" name="confirm" class="form-control" placeholder="RESTORE" required>
+                    </div>
+                    <button class="btn btn-danger" onclick="return confirm('Overwrite all data with this backup?');">
+                        Restore now
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

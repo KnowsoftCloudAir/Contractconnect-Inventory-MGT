@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Homepage editor – CONTRAconnect{% endblock %}
+{% block content %}
+<div class="page-hero">
+  <h2 class="mb-1">Public website content</h2>
+  <p class="text-muted small mb-0">Edit the home page story, map captions, carousel images, testimonies and YouTube video. Changes appear for all visitors.</p>
+</div>
+<form method="post" enctype="multipart/form-data" class="row g-4">
+  <div class="col-lg-6">
+    <div class="card"><div class="card-header bg-white">Hero &amp; map</div><div class="card-body">
+      <div class="mb-2"><label class="form-label">Hero title</label>
+        <input class="form-control" name="hero_title" value="{{ content.hero_title }}"></div>
+      <div class="mb-2"><label class="form-label">Hero tagline</label>
+        <textarea class="form-control" name="hero_tagline" rows="2">{{ content.hero_tagline }}</textarea></div>
+      <div class="mb-2"><label class="form-label">LGA highlight title</label>
+        <input class="form-control" name="lga_name" value="{{ content.lga_name }}"></div>
+      <div class="mb-2"><label class="form-label">LGA detail text</label>
+        <textarea class="form-control" name="lga_detail" rows="2">{{ content.lga_detail }}</textarea></div>
+    </div></div>
+    <div class="card mt-3"><div class="card-header bg-white">Narrative</div><div class="card-body">
+      <div class="mb-2"><label class="form-label">Origin of Mayor’s Challenge</label>
+        <textarea class="form-control" name="origin" rows="4">{{ content.origin }}</textarea></div>
+      <div class="mb-2"><label class="form-label">Funder &amp; partners</label>
+        <textarea class="form-control" name="funder" rows="3">{{ content.funder }}</textarea></div>
+      <div class="mb-2"><label class="form-label">Objectives</label>
+        <textarea class="form-control" name="objectives" rows="3">{{ content.objectives }}</textarea></div>
+      <div class="mb-2"><label class="form-label">Benefits for Edo &amp; Nigeria</label>
+        <textarea class="form-control" name="benefits" rows="3">{{ content.benefits }}</textarea></div>
+      <div class="mb-2"><label class="form-label">About us body</label>
+        <textarea class="form-control" name="about_body" rows="4">{{ content.about_body }}</textarea></div>
+    </div></div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card"><div class="card-header bg-white">Video (YouTube)</div><div class="card-body">
+      <label class="form-label">YouTube link or embed URL</label>
+      <input class="form-control" name="video_url" value="{{ content.video_url }}"
+             placeholder="https://www.youtube.com/watch?v=... or embed URL">
+      <div class="form-text">Watch URLs are converted to embed automatically.</div>
+    </div></div>
+    <div class="card mt-3"><div class="card-header bg-white">Carousel slides (3)</div><div class="card-body">
+      {% for i in [1,2,3] %}
+      <div class="border rounded p-2 mb-3">
+        <div class="fw-semibold small mb-1">Slide {{ i }}</div>
+        {% set imgkey = 'slide' ~ i ~ '_img' %}
+        {% set capkey = 'slide' ~ i ~ '_caption' %}
+        <img src="{{ url_for('static', filename=content[imgkey]) }}" alt="" class="img-fluid rounded mb-2" style="max-height:100px">
+        <input type="file" name="slide{{ i }}_file" class="form-control form-control-sm mb-1" accept="image/*">
+        <input class="form-control form-control-sm" name="{{ capkey }}" value="{{ content[capkey] }}" placeholder="Caption">
+      </div>
+      {% endfor %}
+    </div></div>
+    <div class="card mt-3"><div class="card-header bg-white">Sample stories / testimonies</div><div class="card-body">
+      <textarea class="form-control mb-2" name="story1" rows="2">{{ content.story1 }}</textarea>
+      <textarea class="form-control mb-2" name="story2" rows="2">{{ content.story2 }}</textarea>
+      <textarea class="form-control" name="story3" rows="2">{{ content.story3 }}</textarea>
+    </div></div>
+    <button class="btn btn-success btn-lg w-100 mt-3">Save homepage</button>
+    <a href="{{ url_for('index') }}" target="_blank" class="btn btn-outline-secondary w-100 mt-2">Preview public site</a>
+  </div>
+</form>
+{% endblock %}

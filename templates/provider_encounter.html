@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+{% block title %}Client Encounter – CONTRAconnect{% endblock %}
+{% block content %}
+<h2 class="mb-4">Record Client Encounter – {{ facility.name }}</h2>
+<div class="card">
+    <div class="card-body">
+        <form method="post">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Encounter Date *</label>
+                    <input type="date" name="encounter_date" class="form-control" required>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Age Band</label>
+                    <select name="client_age_band" class="form-select">
+                        <option value="">—</option>
+                        <option>&lt;20</option>
+                        <option>20-24</option>
+                        <option>25-29</option>
+                        <option>30-34</option>
+                        <option>35+</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Parity</label>
+                    <select name="client_parity" class="form-select">
+                        <option value="">—</option>
+                        <option>0</option>
+                        <option>1-2</option>
+                        <option>3+</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Education</label>
+                    <select name="education_level" class="form-select">
+                        <option value="">—</option>
+                        <option>None</option>
+                        <option>Primary</option>
+                        <option>Secondary</option>
+                        <option>Tertiary</option>
+                    </select>
+                </div>
+
+                <div class="col-12"><hr class="my-1"><span class="text-muted small fw-semibold">Client details (care panel)</span></div>
+                <div class="col-md-3">
+                    <label class="form-label">Client code / ID</label>
+                    <input type="text" name="client_code" class="form-control" placeholder="Site anonymous code">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Sex</label>
+                    <select name="client_sex" class="form-select">
+                        <option value="">—</option>
+                        <option>Female</option>
+                        <option>Male</option>
+                        <option>Other</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Residence / area</label>
+                    <input type="text" name="client_residence" class="form-control">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Phone (optional)</label>
+                    <input type="text" name="client_phone" class="form-control">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Satisfaction (1–5)</label>
+                    <select name="satisfaction_score" class="form-select">
+                        <option value="">—</option>
+                        <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option>
+                    </select>
+                </div>
+                <div class="col-md-9">
+                    <label class="form-label">Patient testimony / feedback</label>
+                    <textarea name="patient_testimony" class="form-control" rows="2" placeholder="Client’s own words (only share in reports if consent is ticked)"></textarea>
+                </div>
+                <div class="col-12">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="consent_to_share_story" id="consentStory" value="1">
+                        <label class="form-check-label" for="consentStory">Client consents to share this feedback in programme reports (anonymised)</label>
+                    </div>
+                </div>
+
+
+                <div class="col-md-4">
+                    <label class="form-label">Method Offered</label>
+                    <input type="text" name="method_offered" class="form-control" list="methods">
+                    <datalist id="methods">
+                        {% for p in products %}
+                        <option value="{{ p.name }}">
+                        {% endfor %}
+                    </datalist>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Outcome *</label>
+                    <select name="outcome" id="outcome" class="form-select" required onchange="toggleOutcomeFields()">
+                        <option value="accepted">Accepted & Dispensed</option>
+                        <option value="refused">Refused</option>
+                        <option value="discontinued">Discontinued</option>
+                        <option value="counselled_only">Counselled only</option>
+                    </select>
+                </div>
+                <div class="col-md-4" id="methodAcceptedGroup">
+                    <label class="form-label">Method Accepted</label>
+                    <select name="method_accepted" class="form-select">
+                        <option value="">—</option>
+                        {% for p in products %}
+                        <option value="{{ p.name }}">{{ p.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-md-4" id="productGroup">
+                    <label class="form-label">Product Dispensed</label>
+                    <select name="product_id" class="form-select">
+                        <option value="">—</option>
+                        {% for p in products %}
+                        <option value="{{ p.id }}">{{ p.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4" id="qtyGroup">
+                    <label class="form-label">Quantity Dispensed</label>
+                    <input type="number" name="quantity_dispensed" class="form-control" min="0" value="1">
+                </div>
+                <div class="col-md-4" id="refusalGroup" style="display:none;">
+                    <label class="form-label">Refusal Reason (coded)</label>
+                    <select name="refusal_reason" class="form-select">
+                        <option value="">—</option>
+                        <option>Side-effect concerns</option>
+                        <option>Partner opposition</option>
+                        <option>Wants to conceive soon</option>
+                        <option>Religious reasons</option>
+                        <option>Prefers traditional method</option>
+                        <option>Cost concern</option>
+                        <option>Other</option>
+                    </select>
+                </div>
+                <div class="col-md-4" id="discontGroup" style="display:none;">
+                    <label class="form-label">Discontinuation Reason</label>
+                    <select name="discontinuation_reason" class="form-select">
+                        <option value="">—</option>
+                        <option>Side-effect concerns</option>
+                        <option>Partner opposition</option>
+                        <option>Wants to conceive soon</option>
+                        <option>Method failure</option>
+                        <option>Other</option>
+                    </select>
+                </div>
+
+                <div class="col-12">
+                    <label class="form-label">Counseling Notes</label>
+                    <textarea name="counseling_notes" class="form-control" rows="2"></textarea>
+                </div>
+                <div class="col-12">
+                    <label class="form-label">Digital Observation Checklist (notes)</label>
+                    <textarea name="observation_checklist" class="form-control" rows="2" placeholder="Privacy ensured? Informed choice? …"></textarea>
+                </div>
+            </div>
+            <div class="mt-4">
+                <button type="submit" class="btn btn-success">Save Encounter</button>
+                <a href="{{ url_for('provider_dashboard') }}" class="btn btn-outline-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+document.querySelector('input[name="encounter_date"]').valueAsDate = new Date();
+function toggleOutcomeFields() {
+    const o = document.getElementById('outcome').value;
+    document.getElementById('methodAcceptedGroup').style.display = (o === 'accepted') ? '' : 'none';
+    document.getElementById('productGroup').style.display = (o === 'accepted') ? '' : 'none';
+    document.getElementById('qtyGroup').style.display = (o === 'accepted') ? '' : 'none';
+    document.getElementById('refusalGroup').style.display = (o === 'refused') ? '' : 'none';
+    document.getElementById('discontGroup').style.display = (o === 'discontinued') ? '' : 'none';
+}
+toggleOutcomeFields();
+</script>
+{% endblock %}

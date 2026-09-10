@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Products – CONTRAconnect{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0">Product Catalogue</h2>
+</div>
+<div class="row g-4">
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header bg-white fw-semibold">Add Product</div>
+            <div class="card-body">
+                <form method="post">
+                    <div class="mb-2">
+                        <label class="form-label">Name *</label>
+                        <input type="text" name="name" class="form-control" required>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Method Code *</label>
+                        <input type="text" name="method_code" class="form-control" required placeholder="e.g. IUD, Implant">
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Unit</label>
+                        <input type="text" name="unit" class="form-control" value="piece">
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Unit Cost (₦) *</label>
+                        <input type="number" step="0.01" name="unit_cost" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea name="description" class="form-control" rows="2"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-success w-100">Add Product</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Method</th>
+                            <th>Unit</th>
+                            <th class="text-end">Unit Cost (₦)</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for p in products %}
+                    <tr>
+                        <td>{{ p.name }}</td>
+                        <td><span class="badge bg-info text-dark">{{ p.method_code }}</span></td>
+                        <td>{{ p.unit }}</td>
+                        <td class="text-end">{{ '%.2f'|format(p.unit_cost) }}</td>
+                        <td>{% if p.is_active %}<span class="badge bg-success">Active</span>{% else %}<span class="badge bg-secondary">Inactive</span>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

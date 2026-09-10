@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}New expense – {{ app_brand.app_name if app_brand is defined else 'App' }}{% endblock %}
+{% block content %}
+<h2 class="mb-3">Request payment for project cost</h2>
+<div class="card"><div class="card-body">
+<form method="post" enctype="multipart/form-data">
+  <div class="row g-3">
+    <div class="col-md-4">
+      <label class="form-label">Expense code *</label>
+      <select name="expense_code_id" id="expenseCode" class="form-select" required>
+        <option value="">— Select code —</option>
+        {% for c in codes %}
+        <option value="{{ c.id }}" data-category="{{ c.category }}" data-desc="{{ c.description }}">{{ c.code }} — {{ c.description[:50] }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">Category (auto)</label>
+      <input type="text" id="catField" class="form-control" readonly placeholder="Select a code">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Currency</label>
+      <select name="currency" class="form-select"><option>USD</option><option>NGN</option></select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Amount *</label>
+      <input type="number" step="0.01" min="0.01" name="amount" class="form-control" required>
+    </div>
+    <div class="col-12">
+      <label class="form-label">Description / breakdown *</label>
+      <textarea name="description" id="descField" class="form-control" rows="3" required placeholder="What cost is being claimed?"></textarea>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">Payee name *</label>
+      <input type="text" name="payee_name" class="form-control" value="{{ current_user.full_name }}" required>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">Bank name</label>
+      <input type="text" name="bank_name" class="form-control">
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">Account number</label>
+      <input type="text" name="account_number" class="form-control">
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Account name</label>
+      <input type="text" name="account_name" class="form-control">
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Evidence file</label>
+      <input type="file" name="evidence_file" class="form-control" accept=".pdf,.png,.jpg,.jpeg">
+    </div>
+    <div class="col-12">
+      <label class="form-label">Evidence notes</label>
+      <textarea name="evidence_notes" class="form-control" rows="2"></textarea>
+    </div>
+  </div>
+  <div class="mt-4 d-flex gap-2">
+    <button type="submit" name="action" value="draft" class="btn btn-outline-secondary">Save draft</button>
+    <button type="submit" name="action" value="submit" class="btn btn-success">Submit for Finance review</button>
+    <a href="{{ url_for('expense_list') }}" class="btn btn-link">Cancel</a>
+  </div>
+</form>
+</div></div>
+{% endblock %}
+{% block extra_js %}
+<script>
+const sel = document.getElementById('expenseCode');
+sel?.addEventListener('change', function(){
+  const o = this.options[this.selectedIndex];
+  document.getElementById('catField').value = o.dataset.category || '';
+  const d = document.getElementById('descField');
+  if (d && !d.value) d.value = o.dataset.desc || '';
+});
+</script>
+{% endblock %}

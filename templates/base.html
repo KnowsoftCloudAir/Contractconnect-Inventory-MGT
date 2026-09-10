@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{{ app_brand.app_name if app_brand is defined else 'CONTRAconnect' }}{% endblock %}</title>
+    <meta name="theme-color" content="#0d6e6e">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="CONTRAconnect">
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/icons/favicon-16.png">
+    <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/app.css') }}" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --cc-primary: #0d6e6e;
+            --cc-secondary: #f0f7f7;
+            --cc-accent: #e85d04;
+        }
+        body { background-color: #f4f6f9; min-height: 100vh; }
+        .navbar { background: linear-gradient(135deg, #0d6e6e, #0a4f4f) !important; }
+        .sidebar {
+            min-height: calc(100vh - 56px);
+            background: #fff;
+            border-right: 1px solid #dee2e6;
+        }
+        .sidebar .nav-link {
+            color: #333;
+            border-radius: 0.375rem;
+            margin: 0.15rem 0.5rem;
+        }
+        .sidebar .nav-link:hover, .sidebar .nav-link.active {
+            background-color: var(--cc-secondary);
+            color: var(--cc-primary);
+            font-weight: 600;
+        }
+        .card { border: none; box-shadow: 0 0.125rem 0.25rem rgba(0,0,0,.075); }
+        .stat-card { border-left: 4px solid var(--cc-primary); }
+        .stat-card.warning { border-left-color: #ffc107; }
+        .stat-card.danger { border-left-color: #dc3545; }
+        .stat-card.success { border-left-color: #198754; }
+        .table th { font-size: 0.85rem; text-transform: uppercase; color: #6c757d; }
+        footer { font-size: 0.85rem; color: #6c757d; }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark sticky-top navbar-cc">
+        <div class="container-fluid">
+            <a class="navbar-brand fw-bold d-flex align-items-center gap-2" href="{{ url_for('index') }}">
+                {% if app_brand is defined and app_brand.app_logo %}
+                <img src="{{ url_for('static', filename=app_brand.app_logo) }}" alt="" style="height:28px">
+                {% else %}
+                <i class="bi bi-heart-pulse"></i>
+                {% endif %}
+                {{ app_brand.app_name if app_brand is defined else 'CONTRAconnect' }}
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navMain">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navMain">
+                <ul class="navbar-nav ms-auto align-items-lg-center">
+                    {% if current_user.is_authenticated %}
+                    <li class="nav-item me-3">
+                        <span class="navbar-text text-white d-flex align-items-center gap-2">
+                            {% if current_user.profile_photo %}
+                            <img src="{{ url_for('static', filename=current_user.profile_photo) }}" class="avatar-sm" alt="">
+                            {% else %}
+                            <i class="bi bi-person-circle fs-5"></i>
+                            {% endif %}
+                            <span>{{ current_user.full_name }}
+                            <span class="badge bg-light text-dark ms-1">{{ current_user.role_label if current_user.role_label is defined else current_user.role }}</span></span>
+                        </span>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('change_password') }}" title="Change password">
+                            <i class="bi bi-key"></i> <span class="d-none d-lg-inline">Password</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('logout') }}"><i class="bi bi-box-arrow-right"></i> Logout</a>
+                    </li>
+                    {% else %}
+                    {# Discreet admin access icon on title bar — no label on small screens #}
+                    <li class="nav-item">
+                        <a class="nav-link px-2 opacity-50" href="{{ url_for('admin_access') }}"
+                           title="Authorised access" aria-label="Authorised access"
+                           style="font-size: 0.95rem;">
+                            <i class="bi bi-shield-lock"></i>
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid">
+        <div class="row">
+            {% if current_user.is_authenticated %}
+            <nav class="col-md-2 d-none d-md-block sidebar sidebar-cc py-3">
+                <ul class="nav flex-column">
+                    {% if current_user.role != 'provider' %}
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'staff_dashboard' %}active{% endif %}" href="{{ url_for('staff_dashboard') }}"><i class="bi bi-house"></i> My workspace</a></li>
+                    {% if current_user.role not in ['finance_analyst', 'finance_admin'] %}
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_dashboard' %}active{% endif %}" href="{{ url_for('admin_dashboard') }}"><i class="bi bi-speedometer2"></i> Ops dashboard</a></li>
+                    {% endif %}
+                    {% if current_user.role in ['finance_analyst', 'finance_admin', 'general_admin', 'admin', 'project_manager', 'program_admin'] %}
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_costs' %}active{% endif %}" href="{{ url_for('admin_costs') }}"><i class="bi bi-cash-stack"></i> Cost analytics</a></li>
+                    {% endif %}
+                    {% if current_user.role not in ['finance_analyst', 'finance_admin'] or current_user.role in ['finance_analyst', 'general_admin'] %}
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint in ['admin_facilities','admin_facility_detail'] %}active{% endif %}" href="{{ url_for('admin_facilities') }}"><i class="bi bi-building"></i> Facilities</a></li>
+                    {% endif %}
+                    {% if current_user.role in ['project_manager','rh_consultant','logistics_consultant','sdoc_consultant','general_admin','admin','program_admin','mel_consultant'] %}
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_products' %}active{% endif %}" href="{{ url_for('admin_products') }}"><i class="bi bi-box-seam"></i> Products</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_dispatch' %}active{% endif %}" href="{{ url_for('admin_dispatch') }}"><i class="bi bi-truck"></i> Dispatch</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_requests' %}active{% endif %}" href="{{ url_for('admin_requests') }}"><i class="bi bi-clipboard-check"></i> Stock requests</a></li>
+                    {% endif %}
+                    {% if current_user.role in ['finance_analyst','finance_admin','general_admin','admin'] %}
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_expenditures' %}active{% endif %}" href="{{ url_for('admin_expenditures') }}"><i class="bi bi-journal-text"></i> Ledgers</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('export_financial_excel', days=90) }}"><i class="bi bi-file-earmark-excel"></i> Export financial</a></li>
+                    {% endif %}
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint in ['invoice_list','invoice_detail','invoice_new'] %}active{% endif %}" href="{{ url_for('invoice_list') }}"><i class="bi bi-receipt"></i> Payment invoices</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint and request.endpoint.startswith('expense') %}active{% endif %}" href="{{ url_for('expense_list') }}"><i class="bi bi-cash-coin"></i> Expense requests</a></li>
+                    {% if current_user.role in ['finance_analyst','finance_admin','general_admin','admin','project_manager'] %}
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_budget' %}active{% endif %}" href="{{ url_for('admin_budget') }}"><i class="bi bi-table"></i> Budget template</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'budget_variance_report' %}active{% endif %}" href="{{ url_for('budget_variance_report') }}"><i class="bi bi-graph-up-arrow"></i> Variance report</a></li>
+                    {% endif %}
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('admin_period_report', period='monthly', fmt='pdf') }}"><i class="bi bi-file-earmark-bar-graph"></i> Reports</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('admin_period_report', period='programmatic', fmt='pptx') }}"><i class="bi bi-filetype-ppt"></i> Programmatic PPT</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_branding' %}active{% endif %}" href="{{ url_for('admin_branding') }}"><i class="bi bi-palette"></i> Report branding</a></li>
+                    {% if current_user.role in ['general_admin', 'admin', 'project_manager'] %}
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_homepage_editor' %}active{% endif %}" href="{{ url_for('admin_homepage_editor') }}"><i class="bi bi-window"></i> Public homepage</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_sample_data' %}active{% endif %}" href="{{ url_for('admin_sample_data') }}"><i class="bi bi-database"></i> Report sample data</a></li>
+                    {% endif %}
+                    {% if current_user.role in ['general_admin', 'admin', 'project_manager'] %}
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_backup_page' %}active{% endif %}" href="{{ url_for('admin_backup_page') }}"><i class="bi bi-cloud-arrow-down"></i> Backup &amp; restore</a></li>
+                    {% endif %}
+                    {% if current_user.role in ['general_admin', 'admin', 'project_manager'] %}
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_manage_users' %}active{% endif %}" href="{{ url_for('admin_manage_users') }}"><i class="bi bi-people-fill"></i> Staff rights</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_staff_approvals' %}active{% endif %}" href="{{ url_for('admin_staff_approvals') }}"><i class="bi bi-person-check"></i> Staff approvals</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_activity' %}active{% endif %}" href="{{ url_for('admin_activity') }}"><i class="bi bi-footprint"></i> Activity monitor</a></li>
+                    {% endif %}
+                    {% else %}
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'provider_dashboard' %}active{% endif %}" href="{{ url_for('provider_dashboard') }}"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'provider_stock' %}active{% endif %}" href="{{ url_for('provider_stock') }}"><i class="bi bi-boxes"></i> My Stock</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'provider_request' %}active{% endif %}" href="{{ url_for('provider_request') }}"><i class="bi bi-plus-circle"></i> Request Stock</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'provider_encounter' %}active{% endif %}" href="{{ url_for('provider_encounter') }}"><i class="bi bi-person-hearts"></i> Client Encounter</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'provider_messages' %}active{% endif %}" href="{{ url_for('provider_messages') }}"><i class="bi bi-chat-dots"></i> Messages</a></li>
+                    {% endif %}
+                </ul>
+            </nav>
+            <main class="col-md-10 ms-sm-auto px-md-4 py-4">
+            {% else %}
+            <main class="col-12 px-md-4 py-4">
+            {% endif %}
+
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                {% for category, message in messages %}
+                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+                {% endfor %}
+                {% endif %}
+                {% endwith %}
+
+                {% block content %}{% endblock %}
+            </main>
+        </div>
+    </div>
+
+    <footer class="text-center py-3 cc-footer mt-4">
+        CONTRAconnect &copy; 2026 &mdash; Commodity + Cost Analytics for Contraceptive Services
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    {% block extra_js %}{% endblock %}
+    <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('/static/js/sw.js').catch(function (e) {
+          console.warn('SW registration failed', e);
+        });
+      });
+    }
+    </script>
+</body>
+</html>

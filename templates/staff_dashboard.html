@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}My workspace – CONTRAconnect{% endblock %}
+{% block content %}
+<div class="mb-4">
+    <h2 class="mb-1">{{ current_user.full_name }}</h2>
+    <p class="text-muted mb-0">
+        <span class="badge bg-dark">{{ current_user.role_label }}</span>
+        {% if current_user.staff_title %}<span class="ms-1">{{ current_user.staff_title }}</span>{% endif %}
+    </p>
+</div>
+
+<div class="row g-3 mb-4">
+    {% if current_user.role in ['finance_analyst', 'finance_admin', 'general_admin', 'admin'] %}
+    <div class="col-md-4">
+        <div class="card stat-card warning h-100">
+            <div class="card-body">
+                <div class="text-muted small">Invoices awaiting Finance review</div>
+                <h3 class="mb-0">{{ pending_finance }}</h3>
+                <a href="{{ url_for('invoice_list') }}" class="small">Open queue →</a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    {% if current_user.role in ['project_manager', 'program_admin', 'general_admin', 'admin'] %}
+    <div class="col-md-4">
+        <div class="card stat-card h-100">
+            <div class="card-body">
+                <div class="text-muted small">Invoices awaiting PM approval</div>
+                <h3 class="mb-0">{{ pending_pm }}</h3>
+                <a href="{{ url_for('invoice_list') }}" class="small">Open queue →</a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    <div class="col-md-4">
+        <div class="card stat-card success h-100">
+            <div class="card-body">
+                <div class="text-muted small">Quick actions</div>
+                {% if current_user.role in ['rh_consultant','mel_consultant','demand_consultant','sdoc_consultant','logistics_consultant','project_manager','finance_analyst'] %}
+                <a href="{{ url_for('invoice_new') }}" class="btn btn-sm btn-success mt-2">New payment invoice</a>
+                {% endif %}
+                <a href="{{ url_for('invoice_list') }}" class="btn btn-sm btn-outline-secondary mt-2">View workflow</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header bg-white fw-semibold">Your access (by role)</div>
+            <div class="card-body small">
+                {% if role == 'project_manager' %}
+                <p><strong>Project Manager:</strong> Strategic oversight, facilities, stock, encounters, MEL views, messages, reports (PDF/PPT). <em>No finance ledger exports.</em> Final approval of invoices after Finance review.</p>
+                {% elif role == 'finance_analyst' %}
+                <p><strong>Financial Analyst:</strong> Full finance dashboards, ledgers, exports, vendor monitoring. <em>Must review all payment invoices</em> before Project Manager approval. Can mark approved invoices as paid.</p>
+                {% elif role == 'rh_consultant' %}
+                <p><strong>RH / Service Delivery Lead:</strong> Kiosk clinical performance, supervision notes via encounters, logistics predictive views, invoices for deliverables.</p>
+                {% elif role == 'mel_consultant' %}
+                <p><strong>MEL Consultant:</strong> Method uptake / refusal analytics, data quality, learning reports, invoice claims for MEL deliverables.</p>
+                {% elif role == 'demand_consultant' %}
+                <p><strong>Demand Generation:</strong> Mobilisation-related facility views, client flow indicators, invoice claims for demand-generation deliverables.</p>
+                {% elif role == 'sdoc_consultant' %}
+                <p><strong>Service Delivery Ops:</strong> Field coordination views, encounters support, invoice claims for ops deliverables.</p>
+                {% elif role == 'logistics_consultant' %}
+                <p><strong>Logistics &amp; Supply:</strong> Stock balances, dispatch visibility, replenishment, invoice claims for logistics deliverables.</p>
+                {% else %}
+                <p>Programme workspace. Use the sidebar for modules available to your role.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header bg-white fw-semibold">Recent payment requests</div>
+            <div class="table-responsive">
+                <table class="table table-sm mb-0">
+                    <thead><tr><th>#</th><th>Deliverable</th><th>Amount</th><th>Status</th></tr></thead>
+                    <tbody>
+                    {% for inv in recent_all[:8] %}
+                    <tr>
+                        <td><a href="{{ url_for('invoice_detail', iid=inv.id) }}">{{ inv.invoice_number }}</a></td>
+                        <td class="small">{{ inv.deliverable_title[:40] }}</td>
+                        <td>{{ inv.currency }} {{ '%.2f'|format(inv.amount) }}</td>
+                        <td><span class="badge bg-secondary">{{ inv.status }}</span></td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="4" class="text-muted">No invoices yet</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
