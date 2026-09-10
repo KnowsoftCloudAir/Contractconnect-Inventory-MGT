@@ -10,10 +10,12 @@
 </div>
 
 <div class="row g-3 mb-4">
-  <div class="col-md-3"><div class="card stat-card"><div class="card-body"><div class="text-muted small">Encounters</div><h3>{{ stats.encounters }}</h3><div class="small">Sample: {{ stats.sample_encounters }}</div></div></div></div>
-  <div class="col-md-3"><div class="card stat-card success"><div class="card-body"><div class="text-muted small">Testimonies</div><h3>{{ stats.testimonies }}</h3></div></div></div>
-  <div class="col-md-3"><div class="card stat-card warning"><div class="card-body"><div class="text-muted small">Ledger entries</div><h3>{{ stats.expenditures }}</h3></div></div></div>
-  <div class="col-md-3"><div class="card stat-card"><div class="card-body"><div class="text-muted small">Paid expenses</div><h3>{{ stats.paid_expenses }}</h3><div class="small">Budget lines: {{ stats.budget_lines }}</div></div></div></div>
+  <div class="col-md-2"><div class="card stat-card"><div class="card-body"><div class="text-muted small">Encounters</div><h3>{{ stats.encounters }}</h3><div class="small">Sample: {{ stats.sample_encounters }}</div></div></div></div>
+  <div class="col-md-2"><div class="card stat-card warning"><div class="card-body"><div class="text-muted small">Ledger (financial)</div><h3>{{ stats.expenditures }}</h3></div></div></div>
+  <div class="col-md-2"><div class="card stat-card"><div class="card-body"><div class="text-muted small">Awaiting Finance</div><h3>{{ stats.awaiting_finance }}</h3></div></div></div>
+  <div class="col-md-2"><div class="card stat-card"><div class="card-body"><div class="text-muted small">Awaiting PM</div><h3>{{ stats.awaiting_pm }}</h3></div></div></div>
+  <div class="col-md-2"><div class="card stat-card success"><div class="card-body"><div class="text-muted small">Approved (to pay)</div><h3>{{ stats.approved_ready }}</h3></div></div></div>
+  <div class="col-md-2"><div class="card stat-card success"><div class="card-body"><div class="text-muted small">Paid expenses</div><h3>{{ stats.paid_expenses }}</h3></div></div></div>
 </div>
 
 <div class="row g-4">
@@ -21,7 +23,7 @@
     <div class="card mb-3">
       <div class="card-header bg-white fw-semibold">Load / clear sample set</div>
       <div class="card-body">
-        <p class="small text-muted">Creates sample stock, ~45 encounters (method mix + refusal), ledger lines, pilot budgets, paid expenses for variance, and consented stories.</p>
+        <p class="small text-muted">Creates stock, encounters, full financial ledger rows, expense pipeline (awaiting Finance, awaiting PM, approved, paid, rejected), pilot budgets, and testimonies.</p>
         {% if stats.loaded_at %}<p class="small">Last loaded: <code>{{ stats.loaded_at }}</code></p>{% endif %}
         <form method="post" class="d-grid gap-2">
           <button name="action" value="load" class="btn btn-success" onclick="return confirm('Load / refresh sample report data?');">Load sample data for all reports</button>

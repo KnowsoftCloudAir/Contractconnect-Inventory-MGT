@@ -3208,30 +3208,134 @@ def load_report_sample_data():
                     created_by=admin.id if admin else None,
                 ))
 
-    # Sample paid expenses for variance report
-    if ExpenseRequest.query.filter(ExpenseRequest.request_number.like('SAMPLE-%')).count() < 5:
-        requester = admin
-        for i, c in enumerate(codes[:8]):
-            amt = Decimal(str(random.randint(500, int(float(sample_budgets.get(c.code, 5000)) * 0.4))))
-            er = ExpenseRequest(
-                request_number=f'SAMPLE-EXP-{i+1:03d}',
-                requester_id=requester.id if requester else 1,
-                expense_code_id=c.id,
+    # Financial records + expenses in every workflow state
+    # Clear prior SAMPLE expenses so reload refreshes pipeline
+    ExpenseRequest.query.filter(ExpenseRequest.request_number.like('SAMPLE-%')).delete(synchronize_session=False)
+    Expenditure.query.filter(Expenditure.description.like('SAMPLE-FIN:%')).delete(synchronize_session=False)
+    db.session.flush()
+
+    requester = admin
+    rid = requester.id if requester else 1
+    now = datetime.utcnow()
+    payees = [
+        'Sample Vendor Ltd', 'Edo Field Logistics Co.', 'Benin Clinical Supplies',
+        'Knowsoft Consulting', 'Community Mobilisers Collective', 'City Health Stores'
+    ]
+    # Extra ledger / financial records
+    fin_rows = [
+        ('staff', 'SAMPLE-FIN: NPSA Project Manager salary month 1', 2450, False, 25),
+        ('staff', 'SAMPLE-FIN: Financial Analyst support month 1', 1800, False, 24),
+        ('logistics', 'SAMPLE-FIN: Kiosk restock vehicle hire', 950, False, 20),
+        ('utilities', 'SAMPLE-FIN: Central warehouse utilities', 620, False, 18),
+        ('commodity', 'SAMPLE-FIN: Injectable commodity batch', 12500, False, 30),
+        ('commodity', 'SAMPLE-FIN: Implant commodity batch', 9800, False, 28),
+        ('platform_build', 'SAMPLE-FIN: Cloud hosting quarterly', 3200, True, 15),
+        ('platform_build', 'SAMPLE-FIN: Security audit', 2100, True, 12),
+        ('other', 'SAMPLE-FIN: Stakeholder launch event', 1400, False, 40),
+        ('staff', 'SAMPLE-FIN: Training facilitator fees', 2100, False, 22),
+    ]
+    for cat, desc, amt, plat, days_ago in fin_rows:
+        db.session.add(Expenditure(
+            facility_id=None if plat else facilities[0].id,
+            category=cat, description=desc, amount=Decimal(str(amt)),
+            expenditure_date=now.date() - timedelta(days=days_ago),
+            is_platform_cost=plat, created_by=rid,
+        ))
+
+    # Build expense requests: submitted, finance_review, pm_approved, paid, rejected
+    pipeline = []
+    # Awaiting Finance review
+    for i, c in enumerate(codes[:3]):
+        pipeline.append({
+            'n': f'SAMPLE-AWF-{i+1:03d}', 'code': c, 'status': 'submitted',
+            'amt': random.randint(400, 2200), 'payee': payees[i % len(payees)],
+            'desc': f'SAMPLE awaiting Finance review — {c.description[:60]}',
+            'days': 2 + i,
+        })
+    # Awaiting PM (cleared by Finance)
+    for i, c in enumerate(codes[3:6]):
+        pipeline.append({
+            'n': f'SAMPLE-APM-{i+1:03d}', 'code': c, 'status': 'finance_review',
+            'amt': random.randint(600, 3500), 'payee': payees[(i+2) % len(payees)],
+            'desc': f'SAMPLE cleared by Finance, awaiting PM — {c.description[:60]}',
+            'days': 5 + i, 'fin_days': 3 + i,
+        })
+    # PM approved — ready to pay
+    for i, c in enumerate(codes[6:9]):
+        pipeline.append({
+            'n': f'SAMPLE-APR-{i+1:03d}', 'code': c, 'status': 'pm_approved',
+            'amt': random.randint(800, 4000), 'payee': payees[(i+1) % len(payees)],
+            'desc': f'SAMPLE approved by PM, ready for payment — {c.description[:60]}',
+            'days': 10 + i, 'fin_days': 8 + i, 'pm_days': 6 + i,
+        })
+    # Paid (post to variance actuals)
+    for i, c in enumerate(codes[:10]):
+        pipeline.append({
+            'n': f'SAMPLE-PAID-{i+1:03d}', 'code': c, 'status': 'paid',
+            'amt': random.randint(500, int(float(sample_budgets.get(c.code, 5000)) * 0.35) or 1500),
+            'payee': payees[i % len(payees)],
+            'desc': f'SAMPLE paid and posted to budget actuals — {c.description[:60]}',
+            'days': 20 + i, 'fin_days': 18 + i, 'pm_days': 15 + i, 'paid_days': 12 + i,
+        })
+    # Rejected samples
+    if len(codes) > 10:
+        c = codes[10]
+        pipeline.append({
+            'n': 'SAMPLE-REJ-001', 'code': c, 'status': 'finance_rejected',
+            'amt': 1500, 'payee': payees[0],
+            'desc': 'SAMPLE rejected by Finance — incomplete evidence',
+            'days': 7, 'fin_days': 5,
+        })
+    if len(codes) > 11:
+        c = codes[11]
+        pipeline.append({
+            'n': 'SAMPLE-REJ-002', 'code': c, 'status': 'pm_rejected',
+            'amt': 2200, 'payee': payees[1],
+            'desc': 'SAMPLE rejected by PM — outside approved activity plan',
+            'days': 9, 'fin_days': 7, 'pm_days': 6,
+        })
+
+    for p in pipeline:
+        c = p['code']
+        er = ExpenseRequest(
+            request_number=p['n'],
+            requester_id=rid,
+            expense_code_id=c.id,
+            category=c.category,
+            description=p['desc'],
+            amount=Decimal(str(p['amt'])),
+            currency='USD',
+            payee_name=p['payee'],
+            bank_name='Sample Bank PLC',
+            account_number='0123456789',
+            account_name=p['payee'],
+            evidence_notes='SAMPLE attachment reference for demo reporting',
+            status=p['status'],
+            created_at=now - timedelta(days=p['days']),
+        )
+        if p.get('fin_days') is not None or p['status'] in ('finance_review', 'pm_approved', 'paid', 'finance_rejected', 'pm_rejected'):
+            er.finance_reviewer_id = rid
+            er.finance_reviewed_at = now - timedelta(days=p.get('fin_days', p['days'] - 1))
+            er.finance_notes = 'SAMPLE finance review note'
+        if p.get('pm_days') is not None or p['status'] in ('pm_approved', 'paid', 'pm_rejected'):
+            er.pm_approver_id = rid
+            er.pm_approved_at = now - timedelta(days=p.get('pm_days', p['days'] - 2))
+            er.pm_notes = 'SAMPLE PM decision note'
+        if p['status'] == 'paid':
+            er.paid_by_id = rid
+            er.paid_at = now - timedelta(days=p.get('paid_days', 5))
+            er.voucher_number = f"PV-{p['n']}"
+            # Mirror into ledger as SAMPLE-FIN paid claim
+            db.session.add(Expenditure(
+                facility_id=None,
                 category=c.category,
-                description=f'SAMPLE paid cost against {c.code}',
-                amount=amt,
-                currency='USD',
-                payee_name='Sample Vendor Ltd',
-                status='paid',
-                finance_reviewer_id=requester.id if requester else None,
-                finance_reviewed_at=datetime.utcnow() - timedelta(days=10),
-                pm_approver_id=requester.id if requester else None,
-                pm_approved_at=datetime.utcnow() - timedelta(days=8),
-                paid_by_id=requester.id if requester else None,
-                paid_at=datetime.utcnow() - timedelta(days=5),
-                voucher_number=f'PV-SAMPLE-{i+1:03d}',
-            )
-            db.session.add(er)
+                description=f"SAMPLE-FIN: Paid {p['n']} / {c.code}",
+                amount=Decimal(str(p['amt'])),
+                expenditure_date=er.paid_at.date() if er.paid_at else now.date(),
+                is_platform_cost=c.code.startswith('EXP-PLT'),
+                created_by=rid,
+            ))
+        db.session.add(er)
 
     # Homepage stories can stay as CMS; tag settings
     set_setting('sample_data_loaded_at', datetime.utcnow().isoformat())
@@ -3294,6 +3398,9 @@ def admin_sample_data():
         'sample_encounters': ClientEncounter.query.filter(ClientEncounter.client_code.like('SAMP-%')).count(),
         'expenditures': Expenditure.query.count(),
         'paid_expenses': ExpenseRequest.query.filter_by(status='paid').count(),
+        'awaiting_finance': ExpenseRequest.query.filter_by(status='submitted').count(),
+        'awaiting_pm': ExpenseRequest.query.filter_by(status='finance_review').count(),
+        'approved_ready': ExpenseRequest.query.filter_by(status='pm_approved').count(),
         'budget_lines': BudgetLine.query.count(),
         'testimonies': ClientEncounter.query.filter(
             ClientEncounter.consent_to_share_story == True,
